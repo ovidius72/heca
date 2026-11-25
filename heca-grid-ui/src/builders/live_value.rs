@@ -110,6 +110,74 @@ impl IntoGlyphValue for crate::reactive::Memo<crate::widgets::Glyph> {
     }
 }
 
+/// **What `Avatar::ring(..)` takes** — a tone, fixed (`Tone::Warning`, or `None` for no ring) or
+/// live (a `Signal<Option<Tone>>`, a `Memo`), followed in place.
+pub trait IntoToneValue {
+    /// The tone to show, and follow when it can change.
+    fn into_tone_value(self) -> LiveValue<Option<crate::Tone>>;
+}
+
+impl IntoToneValue for crate::Tone {
+    fn into_tone_value(self) -> LiveValue<Option<crate::Tone>> {
+        LiveValue::fixed(Some(self))
+    }
+}
+
+impl IntoToneValue for Option<crate::Tone> {
+    fn into_tone_value(self) -> LiveValue<Option<crate::Tone>> {
+        LiveValue::fixed(self)
+    }
+}
+
+impl IntoToneValue for Signal<Option<crate::Tone>> {
+    fn into_tone_value(self) -> LiveValue<Option<crate::Tone>> {
+        LiveValue::live(move || self.get())
+    }
+}
+
+impl IntoToneValue for crate::reactive::Memo<Option<crate::Tone>> {
+    fn into_tone_value(self) -> LiveValue<Option<crate::Tone>> {
+        LiveValue::live(move || self.get())
+    }
+}
+
+/// **What `Avatar::picture(..)` takes** — an image, fixed (a file path, an `ImageSource`, or `None`
+/// for none) or live (a `Signal<Option<ImageSource>>`, a `Memo`), followed in place.
+pub trait IntoPictureValue {
+    /// The image to show, and follow when it can change.
+    fn into_picture_value(self) -> LiveValue<Option<crate::image::ImageSource>>;
+}
+
+impl IntoPictureValue for String {
+    fn into_picture_value(self) -> LiveValue<Option<crate::image::ImageSource>> {
+        LiveValue::fixed(Some(crate::image::ImageSource::file(self)))
+    }
+}
+
+impl IntoPictureValue for &str {
+    fn into_picture_value(self) -> LiveValue<Option<crate::image::ImageSource>> {
+        self.to_owned().into_picture_value()
+    }
+}
+
+impl IntoPictureValue for Option<crate::image::ImageSource> {
+    fn into_picture_value(self) -> LiveValue<Option<crate::image::ImageSource>> {
+        LiveValue::fixed(self)
+    }
+}
+
+impl IntoPictureValue for Signal<Option<crate::image::ImageSource>> {
+    fn into_picture_value(self) -> LiveValue<Option<crate::image::ImageSource>> {
+        LiveValue::live(move || self.get())
+    }
+}
+
+impl IntoPictureValue for crate::reactive::Memo<Option<crate::image::ImageSource>> {
+    fn into_picture_value(self) -> LiveValue<Option<crate::image::ImageSource>> {
+        LiveValue::live(move || self.get())
+    }
+}
+
 /// **What `Label::marks(..)` takes** — the character indices to mark, fixed (`[0, 1, 6]`, a `Vec`)
 /// or live (a `Signal<Vec<usize>>`, a function reading signals), followed in place.
 pub trait IntoMarks {

@@ -49,7 +49,10 @@ pub use focus::FocusExt;
 pub use hint::HintExt;
 pub use identity::{IdentityExt, IntoName, IntoNames};
 pub use layout::LayoutExt;
-pub use live_value::{IntoCountValue, IntoGlyphValue, IntoLengthValue, IntoMarks, LiveValue};
+pub use live_value::{
+    IntoCountValue, IntoGlyphValue, IntoLengthValue, IntoMarks, IntoPictureValue, IntoToneValue,
+    LiveValue,
+};
 pub(crate) use live_value::{SizeField, apply_size_values, set_size};
 pub use menu::MenuExt;
 pub use open::{IntoOpen, Open};
