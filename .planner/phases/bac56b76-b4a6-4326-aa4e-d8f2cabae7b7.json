@@ -144,13 +144,13 @@
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-001-a1-floating-placement-in-one-library-function-overlay-tooltip-contextmenu-toast",
           "number": 1,
           "title": "A1 Floating placement in one library function (Overlay, Tooltip, ContextMenu, Toast)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-002-a2-select-s-open-list-as-a-real-column",
           "number": 2,
           "title": "A2 Select's open list as a real column",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-003-a3-flex-baseline-layout-engine-or-keep-with-the-reason",
@@ -168,25 +168,25 @@
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-005-b1-no-frame-on-typed-input",
           "number": 5,
           "title": "B1 No frame on typed input",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-006-b2-one-frame-queued-to-the-screen",
           "number": 6,
           "title": "B2 One frame queued to the screen",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-007-b3-toast-countdown-on-a-timed-wake",
           "number": 7,
           "title": "B3 Toast countdown on a timed wake",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-008-b4-damage-region-rendering-p041",
           "number": 8,
           "title": "B4 Damage-region rendering (P041)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-009-b5-coalesce-notifications",
@@ -234,7 +234,67 @@
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-016-b2-result-one-frame-queued-measured-worse-key-character-median-26-7-ms-vs-15-5-ms-with-two-claude-code-typing-reverted-to-two-with-the-reason-in-gpu-rs",
           "number": 16,
           "title": "B2 result: one frame queued measured worse (key→character median 26.7 ms vs 15.5 ms with two, Claude Code typing) — reverted to two, with the reason in gpu.rs",
+          "checked": true
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-017-f-pane-line-views-t589-folded-in-configurable-lines-agent-session-line-compact-normal-extended-pane-current-view-sidebar-pane-view-key-rpc-view-remembered",
+          "number": 17,
+          "title": "F Pane-line views (T589 folded in): configurable lines, agent_session line, compact/normal/extended + pane_current_view, sidebar_pane_view key + RPC, view remembered",
+          "checked": true
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-018-g-macos-process-cwd-read-from-the-system-proc-pidinfo-the-t591-cwd-item",
+          "number": 18,
+          "title": "G macOS process cwd read from the system (proc_pidinfo) — the T591 cwd item",
+          "checked": true
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-019-h-overlay-migration-toaststack-tooltip-contextmenu-real-rows-select-in-flow-on-overlay-overlay-beside-at-point-corner-at-point-to-in-flow-panel-edge-panel-glow-panel-elevation-per-widget-glow-numbers-commented-as-intended",
+          "number": 19,
+          "title": "H Overlay migration: ToastStack, Tooltip, ContextMenu (real rows), Select (in_flow) on Overlay; Overlay beside/at_point/corner/at_point_to/in_flow, panel_edge/panel_glow/panel_elevation; per-widget glow numbers commented as intended",
+          "checked": true
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-020-i-hit-test-an-overlay-stays-clickable-outside-a-clipping-holder-pass-1-before-the-cut",
+          "number": 20,
+          "title": "I Hit-test: an overlay stays clickable outside a clipping holder (pass 1 before the cut)",
+          "checked": true
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-021-j-no-hand-wired-effects-in-the-app-state-builders-take-a-value-that-changes-17-builders-content-tone-statusdot-badge-command-label-tooltip-disabled-on-close-for-every-surface",
+          "number": 21,
+          "title": "J No hand-wired effects in the app: state builders take a value that changes (17 builders, content_tone, StatusDot, Badge, Command, Label/tooltip, disabled), on_close for every surface",
+          "checked": true
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-022-k-flash-every-flash-steps-on-one-shared-beat-clock-until-beat-a-flash-out-of-sight-asks-for-no-frames",
+          "number": 22,
+          "title": "K Flash: every flash steps on one shared beat (clock::until_beat); a flash out of sight asks for no frames",
+          "checked": true
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-023-l-expos-an-empty-workspace-has-a-card-the-cursor-stops-on-a-workspace-is-always-selectable",
+          "number": 23,
+          "title": "L Exposé: an empty workspace has a card the cursor stops on (a workspace is always selectable)",
+          "checked": true
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-024-m-theme-values-named-by-builders-input-suggest-s-row-count-and-narrowest-width-design-waiting-for-antonio",
+          "number": 24,
+          "title": "M Theme values named by builders (Input::suggest's row count and narrowest width) — design waiting for Antonio",
+          "checked": true
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-025-n-docs-widgets-md-rustdoc-for-every-new-or-changed-builder-overlay-row-cursorlook-keycap-tone-label-color-live-value-builders-on-close-toaststack-cards-contextmenu-rows-panel-bounds",
+          "number": 25,
+          "title": "N docs/widgets.md + rustdoc for every new or changed builder (Overlay, Row CursorLook, Keycap tone, Label color, live-value builders, on_close, ToastStack::cards, ContextMenu rows/panel_bounds)",
           "checked": false
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-026-o-spacing-steps-in-the-theme-spacing-hairline-xl-defaults-unchanged-theme-number-named-count-named-length-theme-count-theme-input-suggestions-read-the-theme-by-name",
+          "number": 26,
+          "title": "O Spacing steps in the theme ([spacing] hairline..xl, defaults unchanged); Theme::number_named / count_named; Length::theme / Count::theme; Input suggestions read the theme by name",
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -244,7 +304,7 @@
       "startedAt": "2026-11-24T20:02:59.572Z",
       "completedAt": "",
       "createdAt": "2026-11-24T09:48:45.965Z",
-      "updatedAt": "2026-11-25T11:02:13.538Z",
+      "updatedAt": "2026-11-25T18:21:34.245Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
@@ -701,7 +761,7 @@
     }
   ],
   "createdAt": "2026-11-24T09:48:30.358Z",
-  "updatedAt": "2026-11-25T11:02:13.538Z",
+  "updatedAt": "2026-11-25T18:21:34.245Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
