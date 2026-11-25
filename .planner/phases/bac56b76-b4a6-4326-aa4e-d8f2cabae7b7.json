@@ -123,10 +123,10 @@
       "priority": 2,
       "shortName": "no-widget-or-composition-write",
       "title": "Hand positions, frame cost and input latency — layout places everything; no wasted frames; keys, output and the wheel feel immediate",
-      "status": "in-progress",
-      "description": "Scope widened by Antonio 2026-11-25 (\"fai tutte e mettile in T581, dove sposti tutta T590; fai il task intero senza fermarti se non per dubbi forti\"). T590 (heca-pro's performance measurements) is merged here verbatim (section C) and closed.\n\n## A. Hand positions (the original T581, plan agreed 2026-11-24)\n- Floating placement in ONE library function: Overlay (Top/Anchored), Tooltip, ContextMenu presenter and ToastStack each shift their panel after layout with their own copy of the maths (shift_subtree in overlay/mod.rs, tooltip.rs, context_menu/presenter.rs, toast/stack.rs). One shared \"place this floating box here\" for all four.\n- Select's open list: rows placed by hand (`y += row_h`, select/component.rs option_targets) → a real column in the panel, like List in the palette.\n- Flex baseline alignment (flex/mod.rs shifts children): try the layout engine's baseline alignment; keep only if identical.\n- Stay, with the reason written in code: ScrollRegion's scroll offset (scrolling is a paint offset, as in CSS) and the app's 5 at_rect uses (terminal link letters, search bar, panes in columns, exposé cards — positions only the model knows; at_rect is the declarative position:absolute).\n- Not defects: column_group.rs:138 and column/mod.rs:122 bounds writes are test code.\n\n## B. Input latency and wasted frames (measured 2026-11-25, release build, HECA_LAG_LOG; ~6 min of real work)\n- Server typed → program output: median 6 ms, p90 15 ms (rare 0.6–4.5 s stalls = slow programs). The lag is not born there.\n- Window key → first frame: median 14 ms, p90 19, p99 45, max 65. A frame costs ~13 ms of which ~10 is `frame.open` = `get_current_texture` waiting for a drawable (AutoVsync, desired_maximum_frame_latency 2, heca-renderer/src/gpu.rs:66). Every frame repaints the whole window (18–22 render passes).\n- Who asks for frames (HECA_FRAME_REASONS): 836 `event TerminalInput` (a frame on every key, before the echo exists), 484 backend_data, 312 marked, 137 `event RequestRedraw`.\nFixes, all in this task:\n1. No frame on typed input: draw when the echo arrives or the window really changed.\n2. One frame queued to the screen instead of two (desired_maximum_frame_latency 1).\n3. Toast countdown bar updated a few times a second on a timed wake (like Elapsed), not every frame (from C).\n4. Damage-region rendering — draw only what changed (P041(F006): stop the per-frame clear, panes report damage, scissor the union, enable via set_damage; heca/src/app/frame/mod.rs:159-167, scene_flush.rs, renderer set_damage exists unused).\n5. Coalesce notifications: many in a few seconds become one (\"50 new messages\") (from C).\n6. Toast takes its parts by position (ICON, COLUMN, DISMISS indices) → named parts, as T580 did elsewhere (from C).\n\n## D. Mouse wheel in the terminal (Antonio 2026-11-25)\nSlow turns barely scroll, and when they do the steps do not match the turn. A small turn should move a little, a bigger/faster turn more — lines scrolled proportional to the turn's speed. Current: heca/src/app/terminal_host/wheel.rs (WheelRemainders keeps fractions; each notch = terminal_wheel_scroll_lines lines; pixels counted in cells). Measure first what the device reports (LineDelta vs PixelDelta, sizes, rate) with the lag log, then make the line count proportional (acceleration by speed), for host scrollback and for programs alike.\n\n## C. T590 — heca-pro's measurements (verbatim, moved from P113(F013)/T590)\nHeca pro found this problems:\nInvestigate.\nHo i risultati delle tre misure (30 secondi ciascuna, build di debug).\n| Caso | Fotogrammi | CPU della finestra | Chi li chiede |\n| A. A riposo | ~40 | quasi sempre 0%, due picchi (33%, 21%) | il puntatore (pointer/mod.rs:638, cambi di \"hover\") |\n| B. 50 stanze, un messaggio ciascuna | ~2250 (75 al secondo) | ~103% fisso | le notifiche: 12146 richieste dalla barra del conto alla rovescia di Toast |\n| C. Terminale con ~100 righe al secondo | ~945 (~31 al secondo) | 57% per 16 secondi, poi ~9% | l'output del terminale (backend_data) |\nIl widget che passa da nascosto a visibile è Toast (toast/mod.rs:73): ogni notifica, quando viene costruita, nasconde i suoi spazi vuoti (icona, azione). Sono 140 cambi per circa 50 notifiche. Non è un ciclo che si ripete all'infinito: avviene una volta per notifica.\nCosa ne ricavo:\n1. Il problema vero sono le notifiche. Ognuna tiene il disegno a 60 fotogrammi al secondo finché la sua barra non si svuota, e con 50 messaggi si susseguono senza fine. E ogni fotogramma ridisegna tutta la finestra: sidebar, pane, barre di scorrimento.\n   - Correzione in Toast: la barra si aggiorna con un risveglio a tempo, poche volte al secondo, come fa già Elapsed, invece di animare a ogni fotogramma.\n   - Correzione di comportamento: 50 messaggi in pochi secondi diventano una notifica sola (\"50 nuovi messaggi\"), invece di 50.\n2. Il terminale: 31 fotogrammi al secondo per 100 righe al secondo è ragionevole, ma il 57% di CPU in debug è tanto. Manca il dato su quanto costa ogni fotogramma e se ridisegna tutta la finestra o solo il terminale. Va rimisurato con HECA_FRAME_TIMES e in release. Il calo al 9% dopo 16 secondi non lo so spiegare ancora.\n3. A riposo va bene: quasi zero, con qualche fotogramma solo per cambi di \"hover\".\n4. Un difetto trovato strada facendo: Toast prende le sue parti per posizione (ICON, COLUMN, DISMISS come indici dentro children). È proprio quello che T580 ha tolto dagli altri widget, e Toast è rimasto indietro.\nLe stampe DIAG sono ancora nella mia copia di heca. Le prove sono spente.\n\n## Also in this worktree\nThe sidebar's workspace number drawn in the theme accent (Antonio: \"orange o accent\"), heca/src/providers/workspaces/workspace_frame.rs — done, test updated and sabotaged.\n\n## Check\nEach fix: test sabotaged where testable; before/after numbers from the lag log (key→screen, frames per keystroke, frame cost, wheel lines per turn). Clippy macOS + Windows, CI. Antonio's eye check: typing, tooltips, menus, toasts, select, palette, scrolling, the wheel.",
-      "descriptionUpdatedAt": "2026-11-25T00:35:45.916Z",
-      "notes": "",
+      "status": "done",
+      "description": "Scope widened by Antonio 2026-11-25 (\"fai tutte e mettile in T581, dove sposti tutta T590; fai il task intero senza fermarti se non per dubbi forti\"). T590 (heca-pro's performance measurements) is merged here verbatim (section C) and closed.\n\n## A. Hand positions (the original T581, plan agreed 2026-11-24)\n- Floating placement in ONE library function: Overlay (Top/Anchored), Tooltip, ContextMenu presenter and ToastStack each shift their panel after layout with their own copy of the maths (shift_subtree in overlay/mod.rs, tooltip.rs, context_menu/presenter.rs, toast/stack.rs). One shared \"place this floating box here\" for all four.\n- Select's open list: rows placed by hand (`y += row_h`, select/component.rs option_targets) → a real column in the panel, like List in the palette.\n- Flex baseline alignment (flex/mod.rs shifts children): try the layout engine's baseline alignment; keep only if identical.\n- Stay, with the reason written in code: ScrollRegion's scroll offset (scrolling is a paint offset, as in CSS) and the app's 5 at_rect uses (terminal link letters, search bar, panes in columns, exposé cards — positions only the model knows; at_rect is the declarative position:absolute).\n- Not defects: column_group.rs:138 and column/mod.rs:122 bounds writes are test code.\n\n## B. Input latency and wasted frames (measured 2026-11-25, release build, HECA_LAG_LOG; ~6 min of real work)\n- Server typed → program output: median 6 ms, p90 15 ms (rare 0.6–4.5 s stalls = slow programs). The lag is not born there.\n- Window key → first frame: median 14 ms, p90 19, p99 45, max 65. A frame costs ~13 ms of which ~10 is `frame.open` = `get_current_texture` waiting for a drawable (AutoVsync, desired_maximum_frame_latency 2, heca-renderer/src/gpu.rs:66). Every frame repaints the whole window (18–22 render passes).\n- Who asks for frames (HECA_FRAME_REASONS): 836 `event TerminalInput` (a frame on every key, before the echo exists), 484 backend_data, 312 marked, 137 `event RequestRedraw`.\nFixes, all in this task:\n1. No frame on typed input: draw when the echo arrives or the window really changed.\n2. One frame queued to the screen instead of two (desired_maximum_frame_latency 1).\n3. Toast countdown bar updated a few times a second on a timed wake (like Elapsed), not every frame (from C).\n4. Damage-region rendering — draw only what changed (P041(F006): stop the per-frame clear, panes report damage, scissor the union, enable via set_damage; heca/src/app/frame/mod.rs:159-167, scene_flush.rs, renderer set_damage exists unused).\n5. Coalesce notifications: many in a few seconds become one (\"50 new messages\") (from C).\n6. Toast takes its parts by position (ICON, COLUMN, DISMISS indices) → named parts, as T580 did elsewhere (from C).\n\n## D. Mouse wheel in the terminal (Antonio 2026-11-25)\nSlow turns barely scroll, and when they do the steps do not match the turn. A small turn should move a little, a bigger/faster turn more — lines scrolled proportional to the turn's speed. Current: heca/src/app/terminal_host/wheel.rs (WheelRemainders keeps fractions; each notch = terminal_wheel_scroll_lines lines; pixels counted in cells). Measure first what the device reports (LineDelta vs PixelDelta, sizes, rate) with the lag log, then make the line count proportional (acceleration by speed), for host scrollback and for programs alike.\n\n## C. T590 — heca-pro's measurements (verbatim, moved from P113(F013)/T590)\nHeca pro found this problems:\nInvestigate.\nHo i risultati delle tre misure (30 secondi ciascuna, build di debug).\n| Caso | Fotogrammi | CPU della finestra | Chi li chiede |\n| A. A riposo | ~40 | quasi sempre 0%, due picchi (33%, 21%) | il puntatore (pointer/mod.rs:638, cambi di \"hover\") |\n| B. 50 stanze, un messaggio ciascuna | ~2250 (75 al secondo) | ~103% fisso | le notifiche: 12146 richieste dalla barra del conto alla rovescia di Toast |\n| C. Terminale con ~100 righe al secondo | ~945 (~31 al secondo) | 57% per 16 secondi, poi ~9% | l'output del terminale (backend_data) |\nIl widget che passa da nascosto a visibile è Toast (toast/mod.rs:73): ogni notifica, quando viene costruita, nasconde i suoi spazi vuoti (icona, azione). Sono 140 cambi per circa 50 notifiche. Non è un ciclo che si ripete all'infinito: avviene una volta per notifica.\nCosa ne ricavo:\n1. Il problema vero sono le notifiche. Ognuna tiene il disegno a 60 fotogrammi al secondo finché la sua barra non si svuota, e con 50 messaggi si susseguono senza fine. E ogni fotogramma ridisegna tutta la finestra: sidebar, pane, barre di scorrimento.\n   - Correzione in Toast: la barra si aggiorna con un risveglio a tempo, poche volte al secondo, come fa già Elapsed, invece di animare a ogni fotogramma.\n   - Correzione di comportamento: 50 messaggi in pochi secondi diventano una notifica sola (\"50 nuovi messaggi\"), invece di 50.\n2. Il terminale: 31 fotogrammi al secondo per 100 righe al secondo è ragionevole, ma il 57% di CPU in debug è tanto. Manca il dato su quanto costa ogni fotogramma e se ridisegna tutta la finestra o solo il terminale. Va rimisurato con HECA_FRAME_TIMES e in release. Il calo al 9% dopo 16 secondi non lo so spiegare ancora.\n3. A riposo va bene: quasi zero, con qualche fotogramma solo per cambi di \"hover\".\n4. Un difetto trovato strada facendo: Toast prende le sue parti per posizione (ICON, COLUMN, DISMISS come indici dentro children). È proprio quello che T580 ha tolto dagli altri widget, e Toast è rimasto indietro.\nLe stampe DIAG sono ancora nella mia copia di heca. Le prove sono spente.\n\n## Also in this worktree\nThe sidebar's workspace number drawn in the theme accent (Antonio: \"orange o accent\"), heca/src/providers/workspaces/workspace_frame.rs — done, test updated and sabotaged.\n\n## Check\nEach fix: test sabotaged where testable; before/after numbers from the lag log (key→screen, frames per keystroke, frame cost, wheel lines per turn). Clippy macOS + Windows, CI. Antonio's eye check: typing, tooltips, menus, toasts, select, palette, scrolling, the wheel.\n\n---\n**Completion summary:**\nShipped in PR #372 (branch feat/t581-no-hand-positions, commit 076c7e6f). CI green on ubuntu, macos, windows; 3548 local tests pass across touched crates; clippy -D warnings clean on macOS and Windows (xwin); Antonio's eye check done (typing, sidebar, menus, tooltips, toasts, exposé, palette, wheel, Select in showcase).\n\nWhat changed: every floating panel (ToastStack corner, Tooltip beside, ContextMenu at_point_to with real Rows, Select anchored in_flow) is an Overlay; Overlay gains beside/at_point(_to)/corner/in_flow/set_position and panel_edge/panel_glow/panel_elevation; keyboard(false) overlays not focusable; hit-test pass 1 before clip cut; damage-region rendering; shared clock beat (until_beat) + out_of_sight for flashes; an Overlay asks a frame only when its panel's place changes (fixed continuous frames with exposé open — measured 254→55 requests per run); live-value state builders everywhere (no hand-wired effects); on_close; Row::cursor_look, Keycap::tone, Label::color; theme [spacing], number_named/count_named, Length::theme/Count::theme; SDK setters for cursor_look, Keycap tone, Overlay corner/panel_elevation (in_flow host-only). App: pane-line views (T589 folded in), macOS process cwd (T591 item), exposé empty-workspace card.\n\nKey files: heca-grid-ui/src/widgets/overlay/{mod,component,place,chrome}.rs, toast/stack.rs, tooltip.rs, context_menu/{presenter,item}.rs, select/*, row.rs, builders/live_value.rs, heca-core/src/clock.rs, heca-theme/src/theme/spacing.rs, heca-view/src/build/{containers,display}.rs, docs/widgets.md.\n\nRemaining: merge of PR #372 is Antonio's; heca server started from a Claude session still inherits agent env vars (restart from a normal terminal, his call).",
+      "descriptionUpdatedAt": "2026-11-25T19:32:20.032Z",
+      "notes": "## Before / after (release build, HECA_LAG_LOG, Antonio's real work on 2026-11-25)\n\n- Frames per key: before, every key asked a frame before the echo existed (836 `event TerminalInput` frames in ~6 min); after B1, a key that only goes to the terminal asks none — the echo's output asks for its own.\n- Frame cost: before ~13 ms (whole window, 18–22 render passes); after B4 (damage-region rendering) 4.5–8 ms for an echo frame.\n- Key → character on screen: before median 14 ms / p90 19 / p99 45 / max 65; after median 17 ms / p90 28 / max 77 over 140 keys typed mostly in Claude Code — the slow tail is the program answering late (Enter 64 ms, Backspace 43 ms before Claude's output arrived), heca draws 6–8 ms after the output lands.\n- B2 (one frame queued): measured worse, key→character median 26.7 ms vs 15.5 ms with two — reverted, reason in gpu.rs.\n- Attention flash with several agents waiting: before ~3500 slow frames a minute (60 fps, every flash at its own phase, off-screen cards stepping too); after K (shared beat + out of sight) 195 then 32 a minute.\n- Space key: 19 of 19 spaces reached the terminal in the logged run; a skipped space does not get lost inside heca.\n- Wheel: one line per slow click (no rounding to a notch × 6).\n\n## Checks\n- Tests: heca-grid-ui 1157, heca 1634, heca-theme + heca-core 351 — all pass; each new test sabotaged.\n- Clippy -D warnings: macOS (lint-changed.sh) and Windows (cargo xwin, every touched crate) clean; Linux left to CI (target not installed here).\n- fmt: clean on every changed crate.",
       "statusLog": [
         {
           "id": "90012516-63fc-4fed-b48e-763698ba4d88",
@@ -135,6 +135,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress",
           "description": ""
+        },
+        {
+          "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-002-in-progress-done",
+          "date": "2026-11-25T19:32:20.030Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped in PR #372 (branch feat/t581-no-hand-positions, commit 076c7e6f). CI green on ubuntu, macos, windows; 3548 local tests pass across touched crates; clippy -D warnings clean on macOS and Windows (xwin); Antonio's eye check done (typing, sidebar, menus, tooltips, toasts, exposé, palette, wheel, Select in showcase).\n\nWhat changed: every floating panel (ToastStack corner, Tooltip beside, ContextMenu at_point_to with real Rows, Select anchored in_flow) is an Overlay; Overlay gains beside/at_point(_to)/corner/in_flow/set_position and panel_edge/panel_glow/panel_elevation; keyboard(false) overlays not focusable; hit-test pass 1 before clip cut; damage-region rendering; shared clock beat (until_beat) + out_of_sight for flashes; an Overlay asks a frame only when its panel's place changes (fixed continuous frames with exposé open — measured 254→55 requests per run); live-value state builders everywhere (no hand-wired effects); on_close; Row::cursor_look, Keycap::tone, Label::color; theme [spacing], number_named/count_named, Length::theme/Count::theme; SDK setters for cursor_look, Keycap tone, Overlay corner/panel_elevation (in_flow host-only). App: pane-line views (T589 folded in), macOS process cwd (T591 item), exposé empty-workspace card.\n\nKey files: heca-grid-ui/src/widgets/overlay/{mod,component,place,chrome}.rs, toast/stack.rs, tooltip.rs, context_menu/{presenter,item}.rs, select/*, row.rs, builders/live_value.rs, heca-core/src/clock.rs, heca-theme/src/theme/spacing.rs, heca-view/src/build/{containers,display}.rs, docs/widgets.md.\n\nRemaining: merge of PR #372 is Antonio's; heca server started from a Claude session still inherits agent env vars (restart from a normal terminal, his call)."
         }
       ],
       "decisions": [],
@@ -210,19 +218,19 @@
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-012-before-after-numbers-from-the-lag-log",
           "number": 12,
           "title": "Before/after numbers from the lag log",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-013-tests-sabotaged-clippy-macos-windows-ci",
           "number": 13,
           "title": "Tests (sabotaged), clippy macOS + Windows, CI",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-014-antonio-eye-check",
           "number": 14,
           "title": "Antonio eye check",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-015-e-one-clock-heca-grid-ui-clock-moved-to-heca-core-clock-layout-animations-flash-hover-and-input-caret-read-it-clock-since-replaces-instant-elapsed-lint-heca-core-tests-one-clock-rs-flaky-macos-test-reported-by-t567",
@@ -288,7 +296,7 @@
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-025-n-docs-widgets-md-rustdoc-for-every-new-or-changed-builder-overlay-row-cursorlook-keycap-tone-label-color-live-value-builders-on-close-toaststack-cards-contextmenu-rows-panel-bounds",
           "number": 25,
           "title": "N docs/widgets.md + rustdoc for every new or changed builder (Overlay, Row CursorLook, Keycap tone, Label color, live-value builders, on_close, ToastStack::cards, ContextMenu rows/panel_bounds)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "c3fe6fdc-0a41-4812-93b0-7f848e5f1a0a-check-026-o-spacing-steps-in-the-theme-spacing-hairline-xl-defaults-unchanged-theme-number-named-count-named-length-theme-count-theme-input-suggestions-read-the-theme-by-name",
@@ -302,16 +310,16 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-11-24T20:02:59.572Z",
-      "completedAt": "",
+      "completedAt": "2026-11-25T19:32:20.030Z",
       "createdAt": "2026-11-24T09:48:45.965Z",
-      "updatedAt": "2026-11-25T18:21:34.245Z",
+      "updatedAt": "2026-11-25T19:32:20.030Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
           "createdAt": "2026-11-24T20:02:59.437Z"
         }
       ],
-      "activeOwnerSession": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d"
+      "activeOwnerSession": ""
     },
     {
       "id": "d2132103-db56-44c5-a8ab-f02a8f7a4255",
@@ -661,11 +669,20 @@
       "priority": 8,
       "shortName": "sidebar-pane-views-compact-nor",
       "title": "Sidebar pane views — compact / normal / extended lists, a current-pane list, switched by an action and remembered",
-      "status": "planned",
-      "description": "Asked by Antonio 2026-11-24 (shape and names his; screenshot: extended = title + cwd + git + agent, normal = title + cwd + git, compact = title + cwd).\n\n## Config — [appearance.sidebar]\n```toml\npane_view          = \"extended\"                          # the view heca starts in: compact | normal | extended\npane_compact_view  = [\"cwd\", \"agent\"]\npane_normal_view   = [\"git\", \"cwd\", \"agent\"]\npane_extended_view = [\"title\", \"git\", \"cwd\", \"agent\"]\npane_current_view  = [\"title\", \"git\", \"cwd\", \"agent\"]    # the current pane's lines; unset = follows the active view\n```\n- Each view is a list of line names, in the order written. Names: \"title\", \"cwd\", \"git\", \"agent\", and lines added by programs built on heca (e.g. \"demo.status\").\n- **\"title\" becomes a line** like the others: the pane's name with its icon. The status dot (green pip) follows the title line; in a view without \"title\" it goes on the first line (Antonio: \"prima riga se fattibile\").\n- Replaces today's `pane_lines` (heca-config/src/appearance/sidebar.rs:36, config.default.toml:750): retired with the usual notice for keys heca no longer reads (heca-config/src/loader/unread.rs).\n\n## Switching\n- An action, through the ActionRegistry, keybinding registry and RPC as always: set a view by name (argument) AND cycle to the next one. In the command palette with a label.\n- The change is an event (`sidebar.pane_view.changed`, THE EVENTS) so plugins and the scripts' stream hear it.\n\n## Remembered\n- The chosen view is saved with `heca_config::state_file` (data folder, JSON, versioned, atomic; same helper as search-history.json / announced.json, and T528 for dock placement). At start the saved view wins, else `pane_view`. A config reload whose `pane_view` changed resets to it (as a sidebar's visibility, T532). Confirm this precedence with Antonio before building.\n\n## How (current state, verified 2026-11-24)\nheca/src/providers/workspaces/pane_row.rs:146-186 builds the row as a `Tile` (status, icon, title, suffix) and appends one line per `ws_state.pane_lines()` entry; every line is a `Visibility` that decides for itself, and the row knows if it is `active`. So a view is: which named lines are visible, read live from one signal (active view + current-pane list), no sidebar rebuild. The title moving into the line list means Tile's title/status slots become driven by the list (the dot on the title line, else the first line).\n\n## Check\nTests (sabotaged): each view shows its lines in order; the current pane uses pane_current_view, unset follows; no title → dot on first line; action set/cycle + event; saved view restored, config reload resets. docs/configuration.md + config.default.toml. Clippy macOS + Windows, CI. Antonio's eye check of the three views and the current pane.",
-      "descriptionUpdatedAt": "2026-11-24T19:34:51.139Z",
+      "status": "done",
+      "description": "Asked by Antonio 2026-11-24 (shape and names his; screenshot: extended = title + cwd + git + agent, normal = title + cwd + git, compact = title + cwd).\n\n## Config — [appearance.sidebar]\n```toml\npane_view          = \"extended\"                          # the view heca starts in: compact | normal | extended\npane_compact_view  = [\"cwd\", \"agent\"]\npane_normal_view   = [\"git\", \"cwd\", \"agent\"]\npane_extended_view = [\"title\", \"git\", \"cwd\", \"agent\"]\npane_current_view  = [\"title\", \"git\", \"cwd\", \"agent\"]    # the current pane's lines; unset = follows the active view\n```\n- Each view is a list of line names, in the order written. Names: \"title\", \"cwd\", \"git\", \"agent\", and lines added by programs built on heca (e.g. \"demo.status\").\n- **\"title\" becomes a line** like the others: the pane's name with its icon. The status dot (green pip) follows the title line; in a view without \"title\" it goes on the first line (Antonio: \"prima riga se fattibile\").\n- Replaces today's `pane_lines` (heca-config/src/appearance/sidebar.rs:36, config.default.toml:750): retired with the usual notice for keys heca no longer reads (heca-config/src/loader/unread.rs).\n\n## Switching\n- An action, through the ActionRegistry, keybinding registry and RPC as always: set a view by name (argument) AND cycle to the next one. In the command palette with a label.\n- The change is an event (`sidebar.pane_view.changed`, THE EVENTS) so plugins and the scripts' stream hear it.\n\n## Remembered\n- The chosen view is saved with `heca_config::state_file` (data folder, JSON, versioned, atomic; same helper as search-history.json / announced.json, and T528 for dock placement). At start the saved view wins, else `pane_view`. A config reload whose `pane_view` changed resets to it (as a sidebar's visibility, T532). Confirm this precedence with Antonio before building.\n\n## How (current state, verified 2026-11-24)\nheca/src/providers/workspaces/pane_row.rs:146-186 builds the row as a `Tile` (status, icon, title, suffix) and appends one line per `ws_state.pane_lines()` entry; every line is a `Visibility` that decides for itself, and the row knows if it is `active`. So a view is: which named lines are visible, read live from one signal (active view + current-pane list), no sidebar rebuild. The title moving into the line list means Tile's title/status slots become driven by the list (the dot on the title line, else the first line).\n\n## Check\nTests (sabotaged): each view shows its lines in order; the current pane uses pane_current_view, unset follows; no title → dot on first line; action set/cycle + event; saved view restored, config reload resets. docs/configuration.md + config.default.toml. Clippy macOS + Windows, CI. Antonio's eye check of the three views and the current pane.\n\n---\n**Completion summary:**\nDone inside T581 (PR #372, commit 076c7e6f, CI green on 3 platforms, eye-checked by Antonio): sidebar pane-line views compact / normal / extended plus the current-pane view; `sidebar_pane_view` action sets a view by name or cycles to the next (key, palette, RPC); sidebar.pane_view.changed event; the chosen view is saved via state_file and a changed [appearance.sidebar] pane_view in the config switches to it; old pane_lines key reported as unread. Files: heca/src/providers/workspaces/pane_view.rs, pane_row.rs, row_lines.rs, chrome/panes/pane_items/lines.rs, chrome/state/workspaces.rs, heca-config/src/loader/unread.rs.",
+      "descriptionUpdatedAt": "2026-11-25T19:32:51.904Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-001-planned-done",
+          "date": "2026-11-25T19:32:51.902Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Done inside T581 (PR #372, commit 076c7e6f, CI green on 3 platforms, eye-checked by Antonio): sidebar pane-line views compact / normal / extended plus the current-pane view; `sidebar_pane_view` action sets a view by name or cycles to the next (key, palette, RPC); sidebar.pane_view.changed event; the chosen view is saved via state_file and a changed [appearance.sidebar] pane_view in the config switches to it; old pane_lines key reported as unread. Files: heca/src/providers/workspaces/pane_view.rs, pane_row.rs, row_lines.rs, chrome/panes/pane_items/lines.rs, chrome/state/workspaces.rs, heca-config/src/loader/unread.rs."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -673,53 +690,53 @@
           "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-001-config-pane-view-four-view-lists-pane-lines-retired-with-a-notice",
           "number": 1,
           "title": "Config: pane_view + four view lists; pane_lines retired with a notice",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-002-title-as-a-line-status-dot-on-the-title-line-else-the-first-line",
           "number": 2,
           "title": "\"title\" as a line; status dot on the title line, else the first line",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-003-rows-read-the-active-view-live-no-rebuild-current-pane-uses-pane-current-view-or-follows",
           "number": 3,
           "title": "Rows read the active view live (no rebuild); current pane uses pane_current_view or follows",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-004-action-set-by-name-cycle-via-actionregistry-keybinding-palette-rpc-sidebar-pane-view-changed-event",
           "number": 4,
           "title": "Action (set by name + cycle) via ActionRegistry, keybinding, palette, RPC; sidebar.pane_view.changed event",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-005-saved-view-via-state-file-precedence-saved-config-reload-of-a-changed-pane-view-resets-confirm-with-antonio",
           "number": 5,
           "title": "Saved view via state_file; precedence saved > config, reload of a changed pane_view resets (confirm with Antonio)",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-006-tests-sabotaged-docs-clippy-macos-windows-ci",
           "number": 6,
           "title": "Tests (sabotaged), docs, clippy macOS + Windows, CI",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3f13b3ed-604d-444a-906e-2df3f42fee7a-check-007-antonio-eye-check",
           "number": 7,
           "title": "Antonio eye check",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-25T19:32:51.902Z",
+      "completedAt": "2026-11-25T19:32:51.902Z",
       "createdAt": "2026-11-24T19:34:51.071Z",
-      "updatedAt": "2026-11-24T19:34:51.071Z",
+      "updatedAt": "2026-11-25T19:32:51.902Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -761,7 +778,7 @@
     }
   ],
   "createdAt": "2026-11-24T09:48:30.358Z",
-  "updatedAt": "2026-11-25T18:21:34.245Z",
+  "updatedAt": "2026-11-25T19:32:51.902Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
