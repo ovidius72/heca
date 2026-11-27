@@ -10,7 +10,17 @@
 //! and renders `--help` from the same table — so a flag cannot exist without being documented. This
 //! module keeps what is its own: how the listing is built.
 
-use crate::keymap::BindingIndex;
+use crate::keymap::{BindingArgs, BindingIndex};
+
+/// A binding as the listing names it: the action, and the arguments the key calls it with —
+/// `command_palette mode=session` — so two keys on one action with different arguments read apart.
+fn binding_name(action: &str, args: &BindingArgs) -> String {
+    let mut name = action.to_string();
+    for (k, v) in args {
+        name.push_str(&format!(" {k}={v}"));
+    }
+    name
+}
 
 /// The flag that selects this mode.
 pub(crate) const FLAG: &str = "--show-keys";
@@ -23,15 +33,15 @@ pub(crate) fn render(index: &BindingIndex, json: bool) -> String {
     // Width from the content, so a long plugin id does not push every column off the terminal and a
     // short list is not padded to a width nothing needs.
     let name_width = index
-        .keys()
-        .map(|a| a.len())
+        .iter()
+        .flat_map(|(a, bound)| bound.iter().map(move |b| binding_name(a, &b.args).len()))
         .max()
         .unwrap_or(0)
         .clamp(8, 40);
     let key_width = index
         .values()
         .flatten()
-        .map(|b| b.key.len())
+        .map(|b| b.sequence().len())
         .max()
         .unwrap_or(0)
         .clamp(3, 24);
@@ -40,8 +50,10 @@ pub(crate) fn render(index: &BindingIndex, json: bool) -> String {
     for (action, bound) in index {
         for b in bound {
             out.push_str(&format!(
-                "{action:<name_width$}  {:<key_width$}  {}\n",
-                b.key, b.layer
+                "{:<name_width$}  {:<key_width$}  {}\n",
+                binding_name(action, &b.args),
+                b.sequence(),
+                b.layer
             ));
         }
     }
@@ -53,10 +65,16 @@ fn render_json(index: &BindingIndex) -> String {
         .iter()
         .flat_map(|(action, bound)| {
             bound.iter().map(move |b| {
+                let args = b
+                    .args
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", quote(k), quote(v)))
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 format!(
-                    "  {{\"action\": {}, \"key\": {}, \"layer\": {}}}",
+                    "  {{\"action\": {}, \"args\": {{{args}}}, \"key\": {}, \"layer\": {}}}",
                     quote(action),
-                    quote(&b.key),
+                    quote(&b.sequence()),
                     quote(&b.layer),
                 )
             })
@@ -88,25 +106,43 @@ fn quote(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keymap::index_binding;
+    use crate::keymap::{BoundKey, index_binding};
 
     fn index() -> BindingIndex {
         let mut index = BindingIndex::new();
-        index_binding(&mut index, "close", "[keys]", "prefix+x");
+        index_binding(&mut index, "close", BoundKey::new("[keys]", "prefix+x"));
         index_binding(
             &mut index,
             "workspaces.cursor_down",
-            "[[keys.component]] workspaces",
-            "j",
+            BoundKey::new("[[keys.component]] workspaces", "j"),
         );
         index_binding(
             &mut index,
             "workspaces.cursor_down",
-            "[[keys.mode]] sidebar",
-            "j",
+            BoundKey::new("[[keys.mode]] sidebar", "j"),
         );
-        index_binding(&mut index, "docker.restart", "plugin", "r");
+        index_binding(&mut index, "docker.restart", BoundKey::new("plugin", "r"));
         index
+    }
+
+    /// **A key that calls its action with arguments says so** — `prefix+#` opens the session list,
+    /// not the palette's action list, and a listing that printed both as `command_palette` could not
+    /// tell them apart.
+    #[test]
+    fn a_binding_with_arguments_is_listed_with_them() {
+        let mut index = index();
+        index_binding(
+            &mut index,
+            "command_palette",
+            BoundKey::new("[[keys.bind]]", "prefix+#").args(&std::collections::HashMap::from([(
+                "mode".to_string(),
+                "session".to_string(),
+            )])),
+        );
+        let out = render(&index, false);
+        assert!(out.contains("command_palette mode=session"), "{out}");
+        let json = render(&index, true);
+        assert!(json.contains(r#""args": {"mode": "session"}"#), "{json}");
     }
 
     /// The listing is the discovery path, so it must show **every** layer — the whole reason it

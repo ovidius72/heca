@@ -496,7 +496,9 @@ impl ServerLoop {
     }
 
     fn attach(&mut self, client: Rc<Connection>, name: Option<String>) {
-        if name.is_none() && self.sessions.is_empty() {
+        // A plain `heca` with nothing running — no session yet, or only terminated and deleted
+        // ones — starts a new session rather than asking: Restart stays a choice in the list.
+        if name.is_none() && self.next_running(None).is_none() {
             let result = dirs::home_dir()
                 .ok_or("no home folder".to_owned())
                 .and_then(|folder| self.create_session(folder, None, None));
@@ -510,7 +512,9 @@ impl ServerLoop {
         }
         let index = match name {
             Some(name) => self.sessions.iter().position(|s| s.info().name == name),
-            None => self.last_index(),
+            // A plain `heca` goes where a window whose session closed goes: the most recent session
+            // still running (one was just started if none was).
+            None => self.next_running(None),
         };
         let Some(index) = index else {
             let _ = client.link.send(ServerMsg::Sessions {
@@ -623,6 +627,50 @@ impl ServerLoop {
 
     fn last_index(&self) -> Option<usize> {
         self.index_for(self.last_session)
+    }
+
+    /// **Where a window goes when it has no session to show** — the most recent session still
+    /// running, other than `except`; then any running one; `None` when nothing runs. The one
+    /// answer for a plain `heca` and for a window whose session was terminated or deleted.
+    pub(super) fn next_running(&self, except: Option<SessionId>) -> Option<usize> {
+        let running = |i: usize| {
+            let info = self.sessions[i].info();
+            Some(info.id) != except && info.status == SessionStatus::Active
+        };
+        self.recent_sessions
+            .iter()
+            .rev()
+            .filter_map(|id| self.index_for(Some(*id)))
+            .find(|&i| running(i))
+            .or_else(|| (0..self.sessions.len()).find(|&i| running(i)))
+    }
+
+    /// **Move every window off session `id`** to [`next_running`](Self::next_running), telling each
+    /// why ([`ServerMsg::SessionLeft`]). Returns whether there was somewhere to go; when there was
+    /// not, the windows stay and the caller tells them the old way.
+    pub(super) fn move_windows_off(&mut self, id: SessionId, deleted: bool) -> bool {
+        let Some(target) = self.next_running(Some(id)) else {
+            return false;
+        };
+        let to = self.sessions[target].info().name.clone();
+        let name = self
+            .index_for(Some(id))
+            .map(|i| self.sessions[i].info().name.clone())
+            .unwrap_or_default();
+        let windows: Vec<Rc<Connection>> = self
+            .clients
+            .iter()
+            .filter(|c| c.session.get() == Some(id))
+            .cloned()
+            .collect();
+        for window in windows {
+            let _ = window.link.send(ServerMsg::SessionLeft {
+                name: name.clone(),
+                deleted,
+            });
+            self.attach(window, Some(to.clone()));
+        }
+        true
     }
 }
 

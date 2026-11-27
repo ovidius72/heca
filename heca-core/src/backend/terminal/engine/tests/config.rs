@@ -130,6 +130,25 @@ fn captures_osc52_clipboard_write_once() {
     assert!(engine.take_clipboard_writes().is_empty());
 }
 
+/// **A copy a program asks for keeps its characters** — a table's border and an accented letter
+/// reach the clipboard as themselves, never as the bytes read one by one.
+#[test]
+fn an_osc52_write_keeps_characters_beyond_ascii() {
+    let writer = SharedWriter::new(Box::new(SinkWriter));
+    let mut engine = TerminalEngine::new(
+        80,
+        24,
+        (8.0, 16.0),
+        writer,
+        None,
+        crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
+    )
+    .expect("terminal engine should initialize");
+    // base64("│ città")
+    engine.advance_bytes(b"]52;c;4pSCIGNpdHTDoA==");
+    assert_eq!(engine.take_clipboard_writes(), vec!["│ città".to_string()]);
+}
+
 #[test]
 fn bracketed_paste_mode_tracks_decset_2004() {
     let writer = SharedWriter::new(Box::new(SinkWriter));

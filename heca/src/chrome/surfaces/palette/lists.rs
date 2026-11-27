@@ -72,6 +72,7 @@ impl PaletteItem {
                 detail: None,
                 icon: None,
                 shortcuts: Vec::new(),
+                actions: Vec::new(),
                 intent: None,
             },
             stands_for: None,

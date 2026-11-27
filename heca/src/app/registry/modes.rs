@@ -67,6 +67,9 @@ pub fn build_modes(
                         action: &binding.action,
                         layer: &label,
                         key: key_str,
+                        args: &binding.args,
+                        // Reached by opening the mode first: shown as both keys.
+                        after: &mode_cfg.trigger,
                     },
                     conflicts,
                     index,

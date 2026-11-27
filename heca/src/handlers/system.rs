@@ -36,11 +36,19 @@ pub fn handle_open_context_menu(
 ) -> crate::actions::ActionResult {
     // **The focused widget's own menu first**. Generalised, not duplicated: this
     // action stopped meaning "the focused pane's menu" and started meaning "the focused widget's,
-    // bubbling outwards" — so `prefix+>`, `Shift+F10` and the Menu key all reach a pane row, a
+    // bubbling outwards" — so `prefix+>` (and any key a user binds to it) reaches a pane row, a
     // column, a workspace or a plugin's row through one catalogued action, and the host knows what
     // none of them are. Deliberately NOT a `[keys.widgets]` intent: `Escape` meaning both the WM's
     // `close_overlay` and the widget's `dismiss` is the split that swallowed `q`.
     if crate::chrome::open_declared_menu_for_focus(state) {
+        return Ok(());
+    }
+    // **A surface in front answers for itself.** With the palette (or any layer) up, the keyboard
+    // is there: a row without actions offers nothing, and the pane behind it is not what was meant.
+    if matches!(
+        crate::app::input::focused_surface(state),
+        crate::app::input::FocusedSurface::Layer { .. }
+    ) {
         return Ok(());
     }
     // No mounted widget declared one: retain the registered active-pane context lookup.

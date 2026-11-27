@@ -134,13 +134,18 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     let prefix_timeout = state.prefix.timeout;
     let should_timeout = matches!(
         state.input_mode,
-        InputMode::Prefix | InputMode::Chord { .. }
+        InputMode::Prefix | InputMode::Sequence { .. }
     ) && state
         .prefix_entered_at
         .is_some_and(|entered| entered.elapsed() >= prefix_timeout);
     if should_timeout {
-        state.input_mode = InputMode::Normal;
+        // A sequence nobody finished does what its keys do alone, as neovim does after `timeoutlen`.
+        let then_alone = match std::mem::replace(&mut state.input_mode, InputMode::Normal) {
+            InputMode::Sequence { then_alone, .. } => then_alone,
+            _ => None,
+        };
         state.prefix_entered_at = None;
+        crate::app::input::alone_after_waiting(state, then_alone);
         state.mark_full_redraw();
     }
 
@@ -339,7 +344,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
             // moment it stops waiting.
             prefix_expiry: matches!(
                 state.input_mode,
-                InputMode::Prefix | InputMode::Chord { .. }
+                InputMode::Prefix | InputMode::Sequence { .. }
             )
             .then(|| state.prefix_entered_at.map(|at| at + prefix_timeout))
             .flatten(),

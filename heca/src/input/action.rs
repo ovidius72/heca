@@ -45,12 +45,24 @@ pub enum WmAction {
     /// Stop the server and with it every session, pane and terminal.
     KillServer,
     NewSession,
-    RenameSession,
+    /// Ask for a new name for `session` (default: this window's), in the rename dialog.
+    RenameSession {
+        session: Option<String>,
+    },
     SwitchSession {
         name: String,
     },
     DetachSession,
     ReconnectSession,
+    /// Open another window on the same server, on `session` (default: this window's). Each window
+    /// has its own view; switching session in one leaves the others where they are.
+    NewWindow {
+        session: Option<String>,
+    },
+    /// Close this window; its session keeps running. The program ends with its last window.
+    CloseWindow,
+    /// Switch this window back to the session it showed before — again, and it comes back.
+    LastSession,
     /// Mirror another window on this session (follow), by its id from the window directory, or
     /// `None` to stop. Window-local: it changes only what this window looks at.
     Follow {

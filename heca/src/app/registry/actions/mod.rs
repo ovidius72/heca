@@ -11,6 +11,9 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(WmActionKind::RenameSession, handle_rename_session);
     registry.register(WmActionKind::SwitchSession, handle_switch_session);
     registry.register(WmActionKind::DetachSession, handle_detach_session);
+    registry.register(WmActionKind::NewWindow, handle_new_window);
+    registry.register(WmActionKind::CloseWindow, handle_close_window);
+    registry.register(WmActionKind::LastSession, handle_last_session);
     registry.register(WmActionKind::ReconnectSession, handle_reconnect_session);
     registry.register(WmActionKind::Follow, handle_follow);
 

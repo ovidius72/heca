@@ -46,6 +46,12 @@ pub fn install_frame_request(f: impl Fn() + Send + Sync + 'static) {
         })))
     });
 }
+/// Put a captured requester back — what a [`WindowContext`](crate::WindowContext) does when its
+/// window's turn comes.
+pub(crate) fn set_frame_waker(wake: FrameWake) {
+    FRAME.with(|frame| *frame.borrow_mut() = wake);
+}
+
 /// Capture this window's requester. A no-op before installation, including headless tests.
 pub fn frame_waker() -> FrameWake {
     FRAME.with(|frame| frame.borrow().clone())

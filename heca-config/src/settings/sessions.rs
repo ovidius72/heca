@@ -27,13 +27,19 @@ declare_settings! {
         pub create_folder: String,
         pub counts: String,
         /// Window title for the first window on a session; `{app}` is the program's fixed name
-        /// (heca, Heca Pro), `{folder}` the session folder shown home-relative, or the session name
-        /// when it has none.
+        /// (heca, Heca Pro), `{session}` the session's name, `{folder}` the session folder shown
+        /// home-relative, or the session name when it has none.
         pub window_title: String,
-        /// Window title for each later window on the same session; `{app}` and `{folder}` as above
+        /// Window title for each later window on the same session; `{app}`, `{session}` and
+        /// `{folder}` as above
         /// and `{number}` is the window's ordinal.
         pub window_title_numbered: String,
         /// The follow picker's row that stops mirroring another window.
         pub stop_following: String,
+        /// Said in a window its session was terminated under, when the window moved on to the most
+        /// recent session still running; `{name}` the terminated one, `{to}` where it went.
+        pub moved_terminated: String,
+        /// The same, for a deleted session.
+        pub moved_deleted: String,
     }
 }

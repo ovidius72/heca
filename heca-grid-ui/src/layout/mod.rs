@@ -72,6 +72,20 @@ pub fn viewport() -> Size {
     VIEWPORT.with(std::cell::Cell::get)
 }
 
+/// The room and theme of the window laid out last, and putting them back — what a
+/// [`WindowContext`](crate::WindowContext) keeps for its window, so a widget acting between layouts
+/// reads its own window's.
+pub(crate) fn laid_out() -> (Size, std::rc::Rc<heca_theme::Theme>) {
+    (
+        VIEWPORT.with(std::cell::Cell::get),
+        THEME.with(|theme| theme.borrow().clone()),
+    )
+}
+pub(crate) fn set_laid_out(viewport: Size, theme: std::rc::Rc<heca_theme::Theme>) {
+    VIEWPORT.with(|v| v.set(viewport));
+    THEME.with(|t| *t.borrow_mut() = theme);
+}
+
 /// Default base font (logical px) when the host doesn't set one — matches the
 /// default theme's `font_size`.
 pub(crate) const DEFAULT_BASE_FONT: f32 = 15.0;

@@ -76,6 +76,7 @@ pub(crate) fn entries(
                     // no decision of its own about iconography.
                     icon: catalog.icon(&meta.name),
                     shortcuts: shortcuts.chords(&meta.name).to_vec(),
+                    actions: Vec::new(),
                     intent: Some(intent),
                 },
             )

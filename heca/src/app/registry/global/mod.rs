@@ -42,6 +42,8 @@ pub fn build_keymap(
                 action: action_name,
                 layer: "[keys]",
                 key: trimmed,
+                args: &no_args,
+                after: "",
             };
             bind_flat(&mut keymap, action.clone(), written, conflicts, index);
         }
@@ -57,6 +59,8 @@ pub fn build_keymap(
                 action: &binding.action,
                 layer: "[[keys.bind]]",
                 key: key_str,
+                args: &binding.args,
+                after: "",
             };
             bind_flat(&mut keymap, action.clone(), written, conflicts, index);
         }
@@ -91,6 +95,8 @@ pub fn build_keymap(
             action: &cmd_cfg.command,
             layer: "[[keys.command]]",
             key: trimmed,
+            args: &no_args,
+            after: "",
         };
         bind_flat(&mut keymap, action, written, conflicts, index);
     }

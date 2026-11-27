@@ -262,7 +262,7 @@ fn default_session_palette_binding_uses_the_registered_action_and_hash_key() {
     let config = heca_config::theme::Config::default();
     let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
     let registry = crate::app::registry::build_registry();
-    for (key, mode) in [("o", "pane"), ("Ctrl+o", "workspace"), ("#", "session")] {
+    for (key, mode) in [("o", "pane"), ("Ctrl+o", "workspace")] {
         let action = WmAction::CommandPalette {
             mode: Some(mode.into()),
             query: None,
@@ -282,13 +282,16 @@ fn default_session_palette_binding_uses_the_registered_action_and_hash_key() {
         "#",
         ModifiersState::SHIFT,
     );
-    let action = WmAction::CommandPalette {
-        mode: Some("session".into()),
-        query: None,
-        ask: None,
-        arguments: None,
-    };
-    assert_eq!(keymap.resolve_builtin(LEADER_LAYER, &hash), Some(&action));
+    // The session list is its own action — the same one the palette's "Sessions" row and
+    // `heca rpc list_sessions` run — so the row shows this key.
+    // It belongs to the server, which answers with the list; the window opens the `#` list on it.
+    assert!(crate::server::sessions::owns(
+        crate::input::WmActionKind::ListSessions
+    ));
+    assert_eq!(
+        keymap.resolve_builtin(LEADER_LAYER, &hash),
+        Some(&WmAction::ListSessions)
+    );
     let catalog = crate::actions::ActionCatalog::with_builtins();
     let (intent, _) = crate::rpc::parse_rpc("command_palette mode=session")
         .unwrap()
@@ -299,7 +302,12 @@ fn default_session_palette_binding_uses_the_registered_action_and_hash_key() {
             &intent.action,
             &crate::app::interaction::intent_args_as_strings(&intent)
         ),
-        Some(action)
+        Some(WmAction::CommandPalette {
+            mode: Some("session".into()),
+            query: None,
+            ask: None,
+            arguments: None,
+        })
     );
 }
 
@@ -397,7 +405,7 @@ fn default_selection_bindings_resolve() {
         Some(&WmAction::EnterSelectionMode)
     );
     assert_eq!(
-        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("Shift+s")),
+        keymap.resolve_builtin(crate::keymap::LEADER_LAYER, &KeyCombo::parse("Shift+q")),
         Some(&WmAction::ClearSelection)
     );
     assert_eq!(
@@ -476,5 +484,56 @@ fn the_sidebar_view_has_a_default_key_and_an_rpc_door() {
     assert_eq!(
         resolved("sidebar_pane_view"),
         Some(WmAction::SidebarPaneView { view: None })
+    );
+}
+
+/// **No key without the prefix opens a menu by default.** heca holds other programs: a global
+/// `Shift+F10` or Menu key would be taken before the program in the focused pane ever saw it. The
+/// context menu is `prefix+>`.
+#[test]
+fn the_shipped_context_menu_key_is_behind_the_prefix_only() {
+    use crate::keymap::{DIRECT_LAYER, LEADER_LAYER};
+    let config = heca_config::theme::Config::default();
+    let keymap = build_keymap(&config, &mut Conflicts::default(), &mut BindingIndex::new());
+    for key in ["Shift+F10", "ContextMenu"] {
+        assert!(
+            keymap
+                .resolve(DIRECT_LAYER, &KeyCombo::parse(key))
+                .is_none(),
+            "{key} must reach the focused program"
+        );
+    }
+    assert_eq!(
+        keymap.resolve_builtin(LEADER_LAYER, &KeyCombo::parse(">")),
+        Some(&WmAction::OpenContextMenu)
+    );
+}
+
+/// **A sequence is bound as its keys in order, and only after the prefix** — `prefix+Ctrl+s r`
+/// renames the session: after the prefix, `Ctrl+s` begins it (nothing is bound to it alone) and `r`
+/// completes it. The palette shows it as written.
+#[test]
+fn the_shipped_session_keys_are_a_sequence_after_the_prefix() {
+    use crate::keymap::LEADER_LAYER;
+    let config = heca_config::theme::Config::default();
+    let mut index = BindingIndex::new();
+    let keymap = build_keymap(&config, &mut Conflicts::default(), &mut index);
+    let shift_s = KeyCombo::parse("Ctrl+s");
+    let first = keymap.step(LEADER_LAYER, std::slice::from_ref(&shift_s));
+    assert!(first.continues, "Ctrl+s begins the session keys");
+    assert_eq!(first.complete, None);
+    let done = keymap.step(LEADER_LAYER, &[shift_s, KeyCombo::parse("r")]);
+    assert!(!done.continues);
+    assert_eq!(
+        done.complete,
+        Some(crate::keymap::ActionRef::Builtin(WmAction::RenameSession {
+            session: None
+        }))
+    );
+    assert!(
+        index["rename_session"]
+            .iter()
+            .any(|b| b.key == "prefix+Ctrl+s r"),
+        "shown as written"
     );
 }

@@ -514,20 +514,22 @@ fn named_sessions_switch_terminate_restart_and_delete_over_the_real_socket() {
                 .any(|line| line.contains("__REPLAY_two words__"))
     });
     assert_eq!(confirmed_termination(root.path(), "A"), "ok\n");
-    assert_eq!(
-        until(&mut a, "SessionTerminated")["session"]["status"],
-        "terminated"
-    );
-    assert_eq!(
-        until(&mut mirror, "SessionTerminated")["session"]["id"],
-        original
-    );
+    // Both windows on A move to the most recent running session, B, told why first.
+    for window in [&mut a, &mut mirror] {
+        let left = until(window, "SessionLeft");
+        assert_eq!(left["name"], "A");
+        assert_eq!(left["deleted"], false);
+        assert_eq!(until(window, "Attached")["session"]["name"], "B");
+    }
+    let list: Value = serde_json::from_str(&cli(root.path(), &["--sessions", "--json"])).unwrap();
+    assert_eq!(list[0]["status"], "terminated", "A is kept for Restart");
     control(&path, json!({"Restart":{"name":"A"}}));
-    assert_eq!(until(&mut a, "Attached")["session"]["id"], original);
-    assert_eq!(
-        until(&mut mirror, "Attached")["session"]["status"],
-        "active"
-    );
+    for window in [&mut a, &mut mirror] {
+        send(window, json!({"AttachTo":{"name":"A"}}));
+        let back = until(window, "Attached");
+        assert_eq!(back["session"]["id"], original);
+        assert_eq!(back["session"]["status"], "active");
+    }
     let restarted_process = until_frame(&mut a, |frame| {
         frame["owner"]["Named"] == "test.original"
             && screen_lines(frame)
@@ -541,7 +543,10 @@ fn named_sessions_switch_terminate_restart_and_delete_over_the_real_socket() {
     send(&mut a, json!({"AttachTo":{"name":"B"}}));
     assert_eq!(until(&mut a, "Attached")["session"]["name"], "B");
     control(&path, json!({"Delete":{"name":"A"}}));
-    assert_eq!(until(&mut mirror, "SessionDeleted")["id"], original);
+    let left = until(&mut mirror, "SessionLeft");
+    assert_eq!(left["name"], "A");
+    assert_eq!(left["deleted"], true);
+    assert_eq!(until(&mut mirror, "Attached")["session"]["name"], "B");
     send(&mut mirror, json!("Detach"));
     let list: Value = serde_json::from_str(&cli(root.path(), &["--sessions", "--json"])).unwrap();
     assert_eq!(list.as_array().unwrap().len(), 1);

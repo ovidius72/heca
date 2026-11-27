@@ -41,6 +41,15 @@ pub(super) struct RowData {
     pub trailing: Option<Rc<dyn Fn() -> crate::WidgetModel>>,
     /// What the row shows instead of the standard one, when its command says.
     pub content: Option<Rc<dyn Fn() -> crate::WidgetModel>>,
+    /// What else can be done with the row — its ⋯ button, right-click and keyboard menu.
+    pub menu: Option<crate::widgets::ContextMenu>,
+}
+
+/// The `key` a result row answers to — what the query field names as the row the keyboard acts on
+/// ([`active_descendant`](crate::builders::FocusExt::active_descendant)), so the keyboard's menu
+/// action opens the selected row's menu.
+fn row_key(index: usize) -> String {
+    format!("command-palette.row.{index}")
 }
 
 /// A row chosen by the pointer, by command index, for the palette to run on its next look.
@@ -68,12 +77,18 @@ pub(super) struct ViewState {
     /// Set when the user edits the query; the palette ranks again on its next tick.
     pub query_changed: Signal<bool>,
     pub placeholder: Signal<String>,
+    /// The ⋯ button's tooltip when it opens a menu.
+    pub menu_tip: Signal<String>,
 }
 
 /// The whole palette: the overlay and what it holds.
 pub(super) fn view(state: &ViewState) -> Overlay {
     let query_changed = state.query_changed;
+    let selected = state.selected;
     let query = Input::new()
+        // The focus stays here while the arrows move the selection; the keyboard acts on the
+        // selected row — its menu opens on the keyboard's menu action.
+        .active_descendant(move || selected.get_untracked().map(row_key))
         .value(state.query)
         .placeholder(state.placeholder)
         .placeholder_on_focus(true)
@@ -84,12 +99,13 @@ pub(super) fn view(state: &ViewState) -> Overlay {
         let rows = state.rows.clone();
         let (selected, results, picks) = (state.selected, state.results, state.picks.clone());
         let size = state.size;
+        let menu_tip = state.menu_tip;
         List::new(state.results)
             .render_item(move |&(_, index), _| {
                 let rows = rows.borrow();
                 match &rows[index].content {
                     Some(make) => make(),
-                    None => crate::WidgetModel::new(row(&rows[index], index, selected)),
+                    None => crate::WidgetModel::new(row(&rows[index], index, selected, menu_tip)),
                 }
             })
             .selected(state.list_selected)
@@ -127,7 +143,12 @@ pub(super) fn view(state: &ViewState) -> Overlay {
 }
 
 /// What one result row shows — the [`List`] puts it in the row it selects.
-fn row(data: &RowData, index: usize, selected: Signal<Option<usize>>) -> Grid {
+fn row(
+    data: &RowData,
+    index: usize,
+    selected: Signal<Option<usize>>,
+    menu_tip: Signal<String>,
+) -> Grid {
     let is_selected = move || selected.get() == Some(index);
     let title = Label::new("")
         .text(data.title)
@@ -166,12 +187,12 @@ fn row(data: &RowData, index: usize, selected: Signal<Option<usize>>) -> Grid {
                 .truncate(Ellipsis::End),
         );
     }
-    // Side by side, starting a new line when they do not fit — a row with ten one-key shortcuts
-    // (`1` … `0`) takes a line or two, not ten. A shortcut of several keys stays together.
-    let shortcuts = Flex::row()
-        .wrap(true)
-        .justify("end")
-        .gap(Spacing::Sm)
+    // **One shortcut per line**, right-aligned: side by side, `^h ^← λh λ←` read as one long
+    // chord, and nobody could tell where one binding ended and the next began. A shortcut of
+    // several keys stays together on its line.
+    let shortcuts = Flex::column()
+        .align("end")
+        .gap(Spacing::Xs)
         .max_width(Length::Em(SHORTCUTS_MAX_EM))
         .child(
             data.chords
@@ -194,8 +215,14 @@ fn row(data: &RowData, index: usize, selected: Signal<Option<usize>>) -> Grid {
                 })
                 .collect::<Vec<_>>(),
         );
-    Grid::new()
-        .template_column("auto 1fr auto")
+    use crate::builders::{IdentityExt, MenuExt};
+    // The row's own `:hover` — the ⋯ shows on the row under the pointer as well as the selected one.
+    let row_box = Grid::new();
+    let hovered = crate::component::Component::base(&row_box).pointer.hovered;
+    let shown = move || is_selected() || hovered.get();
+    let grid = row_box
+        .key(row_key(index))
+        .template_column("auto 1fr auto auto")
         .align("start")
         .gap(Spacing::Sm)
         .width(Length::FULL)
@@ -207,5 +234,54 @@ fn row(data: &RowData, index: usize, selected: Signal<Option<usize>>) -> Grid {
             },
             crate::WidgetModel::new(text),
             crate::WidgetModel::new(shortcuts),
-        ])
+            match &data.menu {
+                Some(menu) => crate::WidgetModel::new(more_button(menu, shown, menu_tip)),
+                // No menu: the column holds nothing.
+                None => crate::WidgetModel::new(Flex::row()),
+            },
+        ]);
+    match &data.menu {
+        Some(menu) => grid.context_menu(menu.clone()),
+        None => grid,
+    }
+}
+
+/// **The ⋯ at the end of a row with a menu** — the same icon button a pane's header uses (a
+/// `Button` showing only its icon), outlined so it reads as a control and never as a key: the
+/// keycaps beside it are chips, this is a framed button that brightens to the accent on hover.
+/// Centred on the row's height. Drawn while the row is the selected one or the one under the
+/// pointer, its box kept the rest of the time so the row does not move. It opens the menu where
+/// it was clicked; a menu of one entry is not opened — the button runs that entry, and its words
+/// (shown on hover) name it.
+fn more_button(
+    menu: &crate::widgets::ContextMenu,
+    shown: impl Fn() -> bool + 'static,
+    menu_tip: Signal<String>,
+) -> Flex {
+    use crate::builders::{EventExt, PresenceExt};
+    let items = menu.menu().clone().into_items();
+    let single = (items.len() == 1)
+        .then(|| items.into_iter().next())
+        .flatten();
+    let words = single
+        .as_ref()
+        .and_then(|item| item.label_text().map(str::to_string))
+        .unwrap_or_else(|| menu_tip.get_untracked());
+    let menu = menu.clone();
+    let button = crate::widgets::Button::new(words)
+        .icon(Glyph::DotsThree)
+        .icon_only(true)
+        .variant(crate::widgets::ButtonVariant::Outline)
+        .size(WidgetSize::Small)
+        .visible(shown)
+        // A button's click is its own: the row is not chosen by it.
+        .on_click(move |ev| match &single {
+            Some(item) => item.activate(),
+            None => menu.show(ev.event()),
+        });
+    // Apart from the keycaps by a step of the theme's spacing, and centred on the row.
+    Flex::row()
+        .padding_left(Spacing::Xs)
+        .align_self("center")
+        .child(button)
 }

@@ -5801,6 +5801,30 @@ back to whoever held it when the surface opened. Nobody writes `base_mut().follo
 Input::new().value(query).follow_focus(search_requested)
 ```
 
+**Several windows on one thread — `WindowContext`.** What a window installs in the library (where a
+frame request, a menu, an action and an unclaimed drop go) and what its layout leaves behind (the
+room, the theme) is one per thread. A program with several windows captures a `WindowContext` right
+after building each, and enters it before that window handles anything, so a widget in window two
+never asks window one for a frame:
+
+```rust
+let two = WindowContext::capture();      // after building window two
+one.enter(); /* window one's event */ one.leave();
+two.enter(); /* window two's event */ two.leave();
+```
+
+A program with one window needs none of it. heca's own windows do this for you.
+
+**The item the keyboard acts on — `.active_descendant(|| key)`**, the DOM's
+`aria-activedescendant`. A field that keeps the focus while the arrows move a selection through a list
+beside it names the selected row by its `key`; the keyboard's menu action (heca's `prefix+>`) then
+opens **that row's** menu, not the field's and not whatever is behind the field. The command palette
+does it for its rows; a Select or a field with suggestions does it the same way.
+
+```rust
+Input::new().value(query).active_descendant(move || selected.get().map(|i| format!("row.{i}")))
+```
+
 Between them there is nothing left for a `Visibility` **kind** to do, which is why there is none.
 Note the asymmetry that used to exist and no longer does: `hidden` is a layout property and was
 always describable, while `visible` is a signal on the base and was reachable from **neither**
@@ -7614,6 +7638,7 @@ not a fabricated device move. Widgets need no private first-move flags or distan
 | `.query(text)` | Set the full query, including any sigil. Default empty. Replaces an earlier named prefill. |
 | `.query_in(Some(scope), text)` | Prefix the declared mode's sigil, then use the same query path. `None` or an unknown scope keeps the text unchanged. Sigils already in the text remain unchanged. Works before or after the mode is declared. |
 | `.placeholder(text)` | Empty-query hint. Default `Type a command…`. |
+| `.menu_tip(text)` | Tooltip of a row's ⋯ when it opens the row's menu (a row with one action names that action instead). Default `Open context menu`. |
 | `.default_open(bool)` | Initial open state; default `false`. |
 | `.panel_size(WidgetSize)` | `Small`, `Normal` (default), or `Large`: maximum width and row count. `Caption` uses Small and `Header` uses Large. Font size stays unchanged; the viewport caps the panel. |
 | `.search(SearchModel)` | Supply shared search memory and matching options. Each declared mode uses its named scope in that same store. |
@@ -7636,12 +7661,13 @@ not a fabricated device move. Widgets need no private first-move flags or distan
 | `.detail(text)` | A separate single-line metadata row below the description or path, sized by the normal layout engine. |
 | `.icon(Glyph)` | Optional leading icon; default absent. The icon column stays aligned for rows without one. |
 | `.trailing(\|\| widget)` | Something at the end of the row's first line, after the title — any widget (a badge, a count). Handed as a way to **make** it, because a row can be built more than once. The title gives way to it on a narrow panel. Host-only (a function). Default absent. |
-| `.keys([KeyCap, …])` | Add one binding as a row of keycaps. Repeat for several bindings; default none. The active mode reserves one shared shortcut column. |
+| `.keys([KeyCap, …])` | Add one binding as a row of keycaps. Repeat for several bindings — one per line, right-aligned, so two bindings never read as one long chord; default none. The active mode reserves one shared shortcut column. |
 | `.id(text)` | Optional stable identity for ranking by past choices. Without one the row still matches and sorts, with no usage boost. |
 | `.group(u16)` | Default `0`. Lower groups lead while the effective query is empty. Typing hands ordering to the matcher. |
 | `.mode(scope)` | Assign one row to an existing mode. Default unset, meaning the default mode. Prefer `mode_with_commands` when declaring a whole list. |
 | `.current(bool)` | Mark where the user already is, using the accent; default `false`. |
 | `.preselect(bool)` | Start the empty-query selection here; default `false`. First matching claim wins. Typing selects the best match instead. |
+| `.context_menu(ContextMenu)` | What else can be done with the row (a session's Rename, Terminate, Delete). The selected row ends in a muted ⋯ — kept apart from the keycaps by a theme spacing step, its box kept on the other rows so nothing moves — and the menu opens from it, from a right-click on the row, and from the keyboard's menu action while the row is selected. A menu of **one** entry is not opened: the ⋯ runs it and its tooltip names it. Choosing the row still runs the command. Host-only (a menu holds functions). Default absent. |
 
 `KeyCap::Nf(NfGlyph)` draws a picture in the icon face; `KeyCap::Text(String)` draws text.
 Row text colours come from the theme, in every mode: the title is `foreground` when the row is selected
@@ -7864,7 +7890,7 @@ Button::new("More").on_click(move |ev| ctx.show(ev));
 ```
 
 The declaration exists **because the keyboard needs it**: with the menu only inside a closure,
-`prefix+>` / `Shift+F10` has nothing to find. Both roads run the same code — the declaration is
+`prefix+>` has nothing to find. Both roads run the same code — the declaration is
 implemented in terms of `ContextMenu::show`.
 
 #### Triggers, anchors, bubbling
