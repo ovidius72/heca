@@ -2854,6 +2854,12 @@ List::new(rooms)
   `menu_up` in `[keys.widgets]`) move it and bring the row into view, even one that was not built;
   pointing at a row selects it without scrolling; writing the signal selects that row and brings it
   into view.
+- **`item_menu(|item, index| Option<ContextMenu>)`** — what else can be done with an item: the
+  **row** declares the menu, so a right-click anywhere on it opens it, and the keyboard's menu
+  action does when the row is selected. `None` for an item with nothing more.
+- **`selected_item()`** — the selected row by its identity, for a field that keeps the keyboard
+  while the arrows move through the list: hand it to
+  [`active_descendant`](#where-the-keyboard-goes--follow_focus-follow_focus_modal).
 - **`on_choose(|index| …)`** — what choosing a row does: Enter on the selected row (`activate` in
   `[keys.widgets]`), or a click.
 - **`border_width(f32)`** — the width of the selected row's outline, the same builder
@@ -5815,14 +5821,16 @@ two.enter(); /* window two's event */ two.leave();
 
 A program with one window needs none of it. heca's own windows do this for you.
 
-**The item the keyboard acts on — `.active_descendant(|| key)`**, the DOM's
-`aria-activedescendant`. A field that keeps the focus while the arrows move a selection through a list
-beside it names the selected row by its `key`; the keyboard's menu action (heca's `prefix+>`) then
-opens **that row's** menu, not the field's and not whatever is behind the field. The command palette
-does it for its rows; a Select or a field with suggestions does it the same way.
+**The item the keyboard acts on — `.active_descendant(..)`**, the DOM's `aria-activedescendant`. A
+field that keeps the focus while the arrows move a selection through a list beside it hands it the
+list's selected row — `List::selected_item()`, the row named by its own identity, no `key` needed;
+the keyboard's menu action (heca's `prefix+>`) then opens **that row's** menu, not the field's and
+not whatever is behind the field. The command palette does it for its rows; a Select or a field
+with suggestions does it the same way.
 
 ```rust
-Input::new().value(query).active_descendant(move || selected.get().map(|i| format!("row.{i}")))
+let list = List::new(items).render_item(row).item_menu(|item, _| Some(menu_for(item)));
+Input::new().value(query).active_descendant(list.selected_item())
 ```
 
 Between them there is nothing left for a `Visibility` **kind** to do, which is why there is none.
@@ -7667,7 +7675,7 @@ not a fabricated device move. Widgets need no private first-move flags or distan
 | `.mode(scope)` | Assign one row to an existing mode. Default unset, meaning the default mode. Prefer `mode_with_commands` when declaring a whole list. |
 | `.current(bool)` | Mark where the user already is, using the accent; default `false`. |
 | `.preselect(bool)` | Start the empty-query selection here; default `false`. First matching claim wins. Typing selects the best match instead. |
-| `.context_menu(ContextMenu)` | What else can be done with the row (a session's Rename, Terminate, Delete). The selected row ends in a muted ⋯ — kept apart from the keycaps by a theme spacing step, its box kept on the other rows so nothing moves — and the menu opens from it, from a right-click on the row, and from the keyboard's menu action while the row is selected. A menu of **one** entry is not opened: the ⋯ runs it and its tooltip names it. Choosing the row still runs the command. Host-only (a menu holds functions). Default absent. |
+| `.context_menu(ContextMenu)` | What else can be done with the row (a session's Rename, Terminate, Delete). The selected row (the list selects the row the pointer moves onto) ends in an outlined ⋯ button — the icon button a pane's header uses, kept apart from the keycaps by a theme spacing step, its box kept on the other rows so nothing moves — and the menu opens from it, from a right-click on the row, and from the keyboard's menu action while the row is selected. The row declares the menu (`List::item_menu`). A menu of **one** entry is not opened: the ⋯ runs it and its tooltip names it. Choosing the row still runs the command. Host-only (a menu holds functions). Default absent. |
 
 `KeyCap::Nf(NfGlyph)` draws a picture in the icon face; `KeyCap::Text(String)` draws text.
 Row text colours come from the theme, in every mode: the title is `foreground` when the row is selected

@@ -29,9 +29,42 @@ fn opened_menus() -> Rc<RefCell<Vec<ContextMenu>>> {
     opened
 }
 
+/// The rows that declare a menu, in the order they are shown — found by what they are, not by a key.
+fn rows_with_a_menu(p: &dyn heca_grid_ui::Component) -> Vec<&dyn heca_grid_ui::Component> {
+    fn walk<'a>(
+        node: &'a dyn heca_grid_ui::Component,
+        out: &mut Vec<&'a dyn heca_grid_ui::Component>,
+    ) {
+        if node.base().context_menu.is_some() {
+            out.push(node);
+        }
+        for child in &node.base().children {
+            walk(child.as_ref(), out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(p, &mut out);
+    out
+}
+
+/// A row's ⋯: the last column of what the row shows.
+fn more_of(row: &dyn heca_grid_ui::Component) -> &dyn heca_grid_ui::Component {
+    let content = row.base().children[0].as_ref();
+    let column = content
+        .base()
+        .children
+        .last()
+        .expect("the ⋯ column")
+        .as_ref();
+    column.base().children[0].as_ref()
+}
+
 fn laid_out(mut p: CommandPalette) -> CommandPalette {
     let viewport = Size::new(1200.0, 800.0);
     heca_grid_ui::settle_focus(&mut p);
+    LayoutEngine::new().compute(&mut p, viewport);
+    // One frame, as the window gives it: the palette ranks and selects its first row.
+    heca_grid_ui::Component::tick(&mut p, 0.016);
     LayoutEngine::new().compute(&mut p, viewport);
     p
 }
@@ -84,14 +117,8 @@ fn the_more_button_of_a_row_with_one_action_runs_it_and_not_the_row() {
             )
             .default_open(true),
     );
-    let row = heca_grid_ui::node_with_key(&p, "command-palette.row.0").expect("the row");
-    let more = row
-        .base()
-        .children
-        .last()
-        .expect("the ⋯ column")
-        .base()
-        .bounds;
+    let rows = rows_with_a_menu(&p);
+    let more = more_of(rows[0]).base().bounds;
     assert!(more.size.w > 0.0, "the ⋯ is laid out on the selected row");
     let centre = heca_grid_ui::Point::new(
         more.loc.x + more.size.w / 2.0,
@@ -113,15 +140,16 @@ fn a_row_without_actions_has_no_more_button() {
             .command(Command::new("work", || {}))
             .default_open(true),
     );
-    let row = heca_grid_ui::node_with_key(&p, "command-palette.row.0").expect("the row");
-    let last = row.base().children.last().unwrap();
-    assert!(last.base().children.is_empty(), "nothing in the ⋯ column");
+    assert!(
+        rows_with_a_menu(&p).is_empty(),
+        "no row declares a menu, so none has a ⋯"
+    );
 }
 
-/// **The ⋯ shows on the selected row and on the row under the pointer** — the row's own `:hover` —
-/// and nowhere else; its box is kept on the others so nothing moves.
+/// **The ⋯ shows on the selected row, and the row the pointer moves onto becomes the selected one**
+/// — nowhere else; its box is kept on the others so nothing moves.
 #[test]
-fn the_more_button_shows_on_the_selected_row_and_on_the_hovered_one() {
+fn the_more_button_shows_on_the_selected_row_which_follows_the_pointer() {
     use heca_grid_ui::reactive::SignalGet as _;
     use heca_grid_ui::{Event, RawPointer, RawPointerKind};
     let log: Log = Default::default();
@@ -133,21 +161,23 @@ fn the_more_button_shows_on_the_selected_row_and_on_the_hovered_one() {
             .default_open(true),
     );
     let shown = |p: &CommandPalette, i: usize| {
-        let row = heca_grid_ui::node_with_key(p, &format!("command-palette.row.{i}")).unwrap();
-        let more = row.base().children.last().unwrap();
-        more.base().children[0].base().visible.get()
+        let rows = rows_with_a_menu(p);
+        more_of(rows[i]).base().visible.get()
     };
     assert!(shown(&p, 0), "the selected row");
     assert!(!shown(&p, 1) && !shown(&p, 2), "not the others");
-    let over = heca_grid_ui::node_with_key(&p, "command-palette.row.2")
-        .unwrap()
-        .base()
-        .bounds;
-    let at = heca_grid_ui::Point::new(over.loc.x + 10.0, over.loc.y + over.size.h / 2.0);
+    let over = rows_with_a_menu(&p)[2].base().bounds;
+    let at = heca_grid_ui::Point::new(
+        over.loc.x + over.size.w / 2.0,
+        over.loc.y + over.size.h / 2.0,
+    );
     heca_grid_ui::dispatch(
         &mut p,
         &Event::Raw(RawPointer::new(RawPointerKind::Moved, at)),
     );
+    // The list selects the row the pointer moved onto; the palette follows on its next frame.
+    heca_grid_ui::Component::tick(&mut p, 0.016);
+    LayoutEngine::new().compute(&mut p, Size::new(1200.0, 800.0));
     assert!(shown(&p, 2), "the row under the pointer");
-    assert!(!shown(&p, 1), "still not a row the pointer is not on");
+    assert!(!shown(&p, 0) && !shown(&p, 1), "the others not");
 }

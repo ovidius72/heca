@@ -209,7 +209,7 @@ fn active_item(root: &dyn Component, focused: Vec<usize>) -> Vec<usize> {
     for node in chain.iter().rev() {
         if let Some(item) = &node.base().active_descendant {
             return item()
-                .and_then(|key| crate::nav::path_with_key(root, &key))
+                .and_then(|id| path_with_identity(root, id))
                 .unwrap_or(focused);
         }
     }
@@ -247,6 +247,25 @@ fn menu_owner<'a>(root: &'a dyn Component, path: &[usize]) -> Option<&'a dyn Com
         }
     }
     best
+}
+
+/// The path to the widget whose identity ([`focus_id`](crate::component::Base::focus_id)) is `id`.
+fn path_with_identity(root: &dyn Component, id: u64) -> Option<Vec<usize>> {
+    fn walk(node: &dyn Component, id: u64, at: &mut Vec<usize>) -> bool {
+        if node.base().focus_id() == id {
+            return true;
+        }
+        for (i, child) in node.base().children.iter().enumerate() {
+            at.push(i);
+            if walk(child.as_ref(), id, at) {
+                return true;
+            }
+            at.pop();
+        }
+        false
+    }
+    let mut path = Vec::new();
+    walk(root, id, &mut path).then_some(path)
 }
 
 /// The path to the focused widget, if one holds the keyboard.

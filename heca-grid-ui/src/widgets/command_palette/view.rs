@@ -45,13 +45,6 @@ pub(super) struct RowData {
     pub menu: Option<crate::widgets::ContextMenu>,
 }
 
-/// The `key` a result row answers to — what the query field names as the row the keyboard acts on
-/// ([`active_descendant`](crate::builders::FocusExt::active_descendant)), so the keyboard's menu
-/// action opens the selected row's menu.
-fn row_key(index: usize) -> String {
-    format!("command-palette.row.{index}")
-}
-
 /// A row chosen by the pointer, by command index, for the palette to run on its next look.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Pick {
@@ -84,17 +77,6 @@ pub(super) struct ViewState {
 /// The whole palette: the overlay and what it holds.
 pub(super) fn view(state: &ViewState) -> Overlay {
     let query_changed = state.query_changed;
-    let selected = state.selected;
-    let query = Input::new()
-        // The focus stays here while the arrows move the selection; the keyboard acts on the
-        // selected row — its menu opens on the keyboard's menu action.
-        .active_descendant(move || selected.get_untracked().map(row_key))
-        .value(state.query)
-        .placeholder(state.placeholder)
-        .placeholder_on_focus(true)
-        .follow_focus(state.open)
-        .width(Length::FULL)
-        .on_change(move |_| query_changed.set(true));
     let list = {
         let rows = state.rows.clone();
         let (selected, results, picks) = (state.selected, state.results, state.picks.clone());
@@ -108,6 +90,12 @@ pub(super) fn view(state: &ViewState) -> Overlay {
                     None => crate::WidgetModel::new(row(&rows[index], index, selected, menu_tip)),
                 }
             })
+            // What else can be done with a row — declared on the row itself, so a right-click on it
+            // and the keyboard's menu action on the selected one both find it.
+            .item_menu({
+                let rows = state.rows.clone();
+                move |&(_, index), _| rows.borrow()[index].menu.clone()
+            })
             .selected(state.list_selected)
             .on_choose(move |at| {
                 if let Some(&(_, index)) = results.get_untracked().get(at) {
@@ -119,6 +107,17 @@ pub(super) fn view(state: &ViewState) -> Overlay {
             // As many rows as the palette's size shows before it scrolls.
             .visible_items(move || panel_metrics(size.get()).1)
     };
+    // The focus stays in the field while the arrows move the selection; the keyboard acts on the
+    // list's selected row — its menu opens on the keyboard's menu action.
+    let selected_row = list.selected_item();
+    let query = Input::new()
+        .active_descendant(selected_row)
+        .value(state.query)
+        .placeholder(state.placeholder)
+        .placeholder_on_focus(true)
+        .follow_focus(state.open)
+        .width(Length::FULL)
+        .on_change(move |_| query_changed.set(true));
     // The panel's body: the query field over the list, as wide as the palette's size says. A
     // column, so in a short window the list gives way and the field keeps its height.
     let size = state.size;
@@ -215,13 +214,7 @@ fn row(
                 })
                 .collect::<Vec<_>>(),
         );
-    use crate::builders::{IdentityExt, MenuExt};
-    // The row's own `:hover` — the ⋯ shows on the row under the pointer as well as the selected one.
-    let row_box = Grid::new();
-    let hovered = crate::component::Component::base(&row_box).pointer.hovered;
-    let shown = move || is_selected() || hovered.get();
-    let grid = row_box
-        .key(row_key(index))
+    Grid::new()
         .template_column("auto 1fr auto auto")
         .align("start")
         .gap(Spacing::Sm)
@@ -235,22 +228,20 @@ fn row(
             crate::WidgetModel::new(text),
             crate::WidgetModel::new(shortcuts),
             match &data.menu {
-                Some(menu) => crate::WidgetModel::new(more_button(menu, shown, menu_tip)),
+                // On the selected row — and the row under the pointer is the selected one: the list
+                // selects what the pointer moves onto.
+                Some(menu) => crate::WidgetModel::new(more_button(menu, is_selected, menu_tip)),
                 // No menu: the column holds nothing.
                 None => crate::WidgetModel::new(Flex::row()),
             },
-        ]);
-    match &data.menu {
-        Some(menu) => grid.context_menu(menu.clone()),
-        None => grid,
-    }
+        ])
 }
 
 /// **The ⋯ at the end of a row with a menu** — the same icon button a pane's header uses (a
 /// `Button` showing only its icon), outlined so it reads as a control and never as a key: the
 /// keycaps beside it are chips, this is a framed button that brightens to the accent on hover.
-/// Centred on the row's height. Drawn while the row is the selected one or the one under the
-/// pointer, its box kept the rest of the time so the row does not move. It opens the menu where
+/// Centred on the row's height. Drawn while the row is the selected one (the list selects the row
+/// the pointer moves onto), its box kept the rest of the time so the row does not move. It opens the menu where
 /// it was clicked; a menu of one entry is not opened — the button runs that entry, and its words
 /// (shown on hover) name it.
 fn more_button(

@@ -47,12 +47,15 @@ use slot::{Measured, Slot};
 
 /// What makes the widget for one item.
 type RenderItem<T> = Rc<dyn Fn(&T, usize) -> crate::WidgetModel>;
+type ItemMenu<T> = Rc<dyn Fn(&T, usize) -> Option<crate::widgets::ContextMenu>>;
 
 /// **A long list that builds only what is on screen** — see the module docs.
 pub struct List<T: Clone + PartialEq + 'static> {
     base: Base,
     items: Signal<Vec<T>>,
     render: Option<RenderItem<T>>,
+    /// What else can be done with an item — declared on its row; see [`item_menu`](List::item_menu).
+    item_menu: Option<ItemMenu<T>>,
     selected: Signal<Option<usize>>,
     on_choose: Option<Rc<dyn Fn(usize)>>,
     border_width: Option<f32>,
@@ -78,6 +81,9 @@ pub struct List<T: Clone + PartialEq + 'static> {
     pointed: Rc<Cell<bool>>,
     /// The selection the list last acted on.
     seen: Option<usize>,
+    /// The identity of the row built for each item index — what [`selected_item`](List::selected_item)
+    /// reads. A row built again for an index replaces the entry.
+    row_ids: Rc<std::cell::RefCell<std::collections::HashMap<usize, u64>>>,
 }
 
 impl<T: Clone + PartialEq + 'static> List<T> {
@@ -93,6 +99,7 @@ impl<T: Clone + PartialEq + 'static> List<T> {
             base,
             items,
             render: None,
+            item_menu: None,
             selected: signal(None),
             on_choose: None,
             border_width: None,
@@ -107,7 +114,24 @@ impl<T: Clone + PartialEq + 'static> List<T> {
             by_keyboard: signal(false),
             pointed: Rc::new(Cell::new(false)),
             seen: None,
+            row_ids: Rc::default(),
         }
+    }
+
+    /// **What else can be done with an item** — its row declares the menu, so a right-click
+    /// anywhere on the row opens it, and the keyboard's menu action does when the row is the
+    /// selected one (a field holding the keyboard names it with
+    /// [`selected_item`](List::selected_item)). `None` for an item with nothing more.
+    ///
+    /// ```ignore
+    /// List::new(sessions).render_item(row).item_menu(|session, _| Some(session_menu(session)))
+    /// ```
+    pub fn item_menu(
+        mut self,
+        menu: impl Fn(&T, usize) -> Option<crate::widgets::ContextMenu> + 'static,
+    ) -> Self {
+        self.item_menu = Some(Rc::new(menu));
+        self
     }
 
     /// **The widget for one item** — `|item, index| …`, any widget. Called only for the items in
@@ -126,6 +150,19 @@ impl<T: Clone + PartialEq + 'static> List<T> {
     pub fn selected(mut self, selected: Signal<Option<usize>>) -> Self {
         self.selected = selected;
         self
+    }
+
+    /// **The selected row, by its identity** — what a field that keeps the keyboard while the
+    /// arrows move through this list hands to
+    /// [`active_descendant`](crate::builders::FocusExt::active_descendant), so the keyboard's menu
+    /// action opens the selected row's menu. Take it once every builder has run.
+    pub fn selected_item(&self) -> impl Fn() -> Option<u64> + 'static {
+        let (selected, ids) = (self.selected, self.row_ids.clone());
+        move || {
+            selected
+                .get_untracked()
+                .and_then(|at| ids.borrow().get(&at).copied())
+        }
     }
 
     /// **What choosing a row does** — Enter on the selected row, or a click. Gets its position.
@@ -182,6 +219,8 @@ impl<T: Clone + PartialEq + 'static> List<T> {
         let make = {
             let (selected, by_keyboard, pointed) =
                 (self.selected, self.by_keyboard, self.pointed.clone());
+            let row_ids = self.row_ids.clone();
+            let item_menu = self.item_menu.clone();
             let (choose, measured, border) = (
                 self.on_choose.clone(),
                 self.measured.clone(),
@@ -211,6 +250,14 @@ impl<T: Clone + PartialEq + 'static> List<T> {
                 if let Some(width) = border {
                     row = row.border_width(width);
                 }
+                if let Some(menu) = item_menu.as_ref().and_then(|menu| menu(item, index)) {
+                    use crate::builders::MenuExt;
+                    row = row.context_menu(menu);
+                }
+                // The row this index has now — what `selected_item` names.
+                row_ids
+                    .borrow_mut()
+                    .insert(index, crate::Component::base(&row).focus_id());
                 Slot::new(row, measured.clone())
             }
         };

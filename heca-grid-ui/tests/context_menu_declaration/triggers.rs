@@ -164,23 +164,25 @@ fn the_keyboard_trigger_opens_the_menu_of_the_item_the_focused_widget_names() {
     use heca_grid_ui::reactive::{SignalGet as _, SignalUpdate as _, signal};
     let opened = recording_sink();
     let selected = signal(Some(1usize));
-    let row = |i: usize, name: &str| {
+    let row = |name: &str| {
         Row::new()
-            .key(format!("row.{i}"))
             .width(Length::Px(100.0))
             .height(Length::Px(20.0))
             .child(Label::new(name))
             .context_menu(menu_named(name))
     };
+    let (first, second) = (row("First"), row("Second"));
+    // A row is named by its own identity — no key.
+    let ids = [first.base().focus_id(), second.base().focus_id()];
     let mut root = Flex::column()
         .context_menu(menu_named("Behind"))
         .child(
             Input::new()
                 .width(Length::Px(100.0))
-                .active_descendant(move || selected.get_untracked().map(|i| format!("row.{i}"))),
+                .active_descendant(move || selected.get_untracked().map(|i| ids[i])),
         )
-        .child(row(0, "First"))
-        .child(row(1, "Second"));
+        .child(first)
+        .child(second);
     LayoutEngine::new().compute(&mut root, Size::new(200.0, 100.0));
     root.base().children[0].base().focus(false);
 

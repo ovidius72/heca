@@ -377,12 +377,13 @@ pub struct Base {
     /// shown by a menu bar instead. What makes it a *context* menu is being here — attached to a
     /// widget, opened by a right-click or the keyboard action.
     pub context_menu: Option<Box<dyn Fn(heca_core::layout::Point) -> crate::widgets::ContextMenu>>,
-    /// **The item the keyboard acts on while this widget holds focus** — the `key` of a row
-    /// elsewhere in the tree, as the DOM's `aria-activedescendant`. A palette's query field keeps
+    /// **The item the keyboard acts on while this widget holds focus** — the identity
+    /// ([`focus_id`](Base::focus_id)) of a widget elsewhere in the tree, as the DOM's
+    /// `aria-activedescendant`. A palette's query field keeps
     /// the focus while the arrows move a selection in the list beside it; the keyboard's menu
     /// action opens the selected row's menu, not the field's. Written with
     /// [`active_descendant`](crate::builders::FocusExt::active_descendant).
-    pub active_descendant: Option<std::rc::Rc<dyn Fn() -> Option<String>>>,
+    pub active_descendant: Option<std::rc::Rc<dyn Fn() -> Option<u64>>>,
     /// **What a leader-key pick does to this widget, when that differs from acting on it** —
     /// written with [`on_hint`](crate::builders::HintExt::on_hint), on any widget.
     ///
