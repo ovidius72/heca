@@ -48,6 +48,7 @@ pub use runtime::NotificationRuntime;
 pub(crate) use sink::collect_during as collect_notifications;
 pub(crate) use sink::raise;
 pub use sink::{Notification, install_notification_sink};
+pub(crate) use sink::{NotificationSink, notification_sink, set_notification_sink};
 pub use store::*;
 
 #[cfg(test)]

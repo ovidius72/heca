@@ -26,5 +26,6 @@ mod filtering;
 mod history;
 mod mode_declarations;
 mod modes;
+mod row_menu;
 mod secondary;
 mod sizing;

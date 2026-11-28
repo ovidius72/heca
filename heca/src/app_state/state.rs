@@ -52,7 +52,7 @@ pub type PendingMenu = (
 ///   or focus change that affects the sidebar projection.
 pub struct AppState {
     pub window: Arc<Window>,
-    pub event_proxy: EventLoopProxy<AppEvent>,
+    pub event_proxy: crate::app::events::WindowProxy,
     pub surface: wgpu::Surface<'static>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,

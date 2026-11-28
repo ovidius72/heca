@@ -140,6 +140,7 @@ impl Base {
             built_from: None,
             cursor: None,
             context_menu: None,
+            active_descendant: None,
             surface: false,
             surface_slot: None,
             presence: crate::animation::Presence::new(),

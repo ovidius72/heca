@@ -76,6 +76,9 @@ pub struct CommandPalette {
     selected: usize,
     /// The query field's placeholder — the field follows it.
     placeholder: Signal<String>,
+    /// The tooltip of a row's ⋯ button when it opens a menu — see
+    /// [`menu_tip`](CommandPalette::menu_tip).
+    menu_tip: Signal<String>,
     /// How roomy the panel is — width and row count, never font. Set from the app's
     /// `[settings] command_palette_size`; the panel's body and list read it for their own size.
     panel_size: Signal<WidgetSize>,
@@ -130,6 +133,7 @@ impl CommandPalette {
         let open = base.open;
         let query_changed = signal(false);
         let placeholder = signal(String::from("Type a command…"));
+        let menu_tip = signal(String::from("Open context menu"));
         let query = signal(String::new());
         let rows = Rc::new(RefCell::new(Vec::new()));
         let shown = signal(Vec::new());
@@ -148,6 +152,7 @@ impl CommandPalette {
             query,
             query_changed,
             placeholder,
+            menu_tip,
         };
         let view = Rc::new(RefCell::new(view));
         Self::attach_panel(&mut base, &view);
@@ -161,6 +166,7 @@ impl CommandPalette {
             query_changed,
             selected: 0,
             placeholder,
+            menu_tip,
             panel_size,
             open,
             was_open: false,
@@ -220,6 +226,7 @@ impl CommandPalette {
             chords: c.chords.clone(),
             trailing: c.trailing.clone(),
             content: c.content.clone(),
+            menu: c.menu.clone(),
         });
         self.commands.push(c);
     }
@@ -233,6 +240,14 @@ impl CommandPalette {
     #[heca_grid_ui_macros::prop]
     pub fn panel_size(self, size: WidgetSize) -> Self {
         self.panel_size.set(size);
+        self
+    }
+
+    /// **The tooltip of a row's ⋯ button** when it opens the row's menu (a row with one entry names
+    /// that entry instead) — a fixed text, or one that changes. Default: `"Open context menu"`.
+    #[heca_grid_ui_macros::prop]
+    pub fn menu_tip(self, text: impl crate::builders::IntoTextValue) -> Self {
+        text.into_text_value().show_in(self.menu_tip);
         self
     }
 

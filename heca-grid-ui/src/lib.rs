@@ -60,6 +60,8 @@ pub mod theme;
 pub mod tone;
 pub use flash::FlashHandle;
 pub mod widgets;
+mod window;
+pub use window::WindowContext;
 
 /// Geometry primitives, re-exported from `heca-core` so consumers of the public
 /// API (which uses `Rectangle`/`Size`) need no direct `heca-core` dependency.

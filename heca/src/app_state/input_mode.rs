@@ -87,6 +87,16 @@ pub enum ColumnPickTarget {
     NewRow { col: usize, row: usize },
 }
 
+/// **What the keys of an unfinished sequence do on their own** — run when the next key does not
+/// continue the sequence, or the wait runs out.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SequenceAlone {
+    /// An action bound to them.
+    Action(crate::keymap::ActionRef),
+    /// The mode they open (`prefix+r` opens resize).
+    Mode(String),
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputMode {
     Normal,
@@ -102,17 +112,13 @@ pub enum InputMode {
         focus_after: bool,
     },
     /// Sidebar navigation: keyboard navigation within the sidebar tree.
-    /// Chord sequence: multi-key binding (e.g. prefix → w → 1).
-    /// `sequence` holds the keys pressed so far (after prefix).
-    ///
-    /// Partially wired: render and input handling exist, but no command path
-    /// constructs this variant yet. See handle_chord_mode() in app/input.rs.
-    #[expect(
-        dead_code,
-        reason = "Reserved for multi-key chord UX; will be constructed when chord entry is implemented."
-    )]
-    Chord {
-        sequence: Vec<String>,
+    /// **Keys after the prefix that begin a longer sequence**, waiting `prefix_timeout_ms` for the
+    /// next — as neovim waits `timeoutlen`. A key that continues it moves on; one that does not, or
+    /// the time running out, runs `then_alone` (what the keys pressed so far do on their own, if
+    /// anything) and the new key is handled afresh.
+    Sequence {
+        keys: Vec<crate::keymap::KeyCombo>,
+        then_alone: Option<SequenceAlone>,
     },
     /// Custom mode (e.g. resize mode). Stay in mode until Esc.
     /// `name` is the mode identifier from config.
@@ -233,7 +239,7 @@ impl InputMode {
             // Everything else reads keys for something other than picking a letter, or reads none.
             InputMode::Normal
             | InputMode::Prefix
-            | InputMode::Chord { .. }
+            | InputMode::Sequence { .. }
             | InputMode::Mode { .. }
             | InputMode::Selection
             | InputMode::ConfirmDelete
@@ -274,7 +280,7 @@ impl InputMode {
             InputMode::HintPick { candidates, .. } => Some(candidates.len()),
             InputMode::Normal
             | InputMode::Prefix
-            | InputMode::Chord { .. }
+            | InputMode::Sequence { .. }
             | InputMode::Mode { .. }
             | InputMode::Selection
             | InputMode::ConfirmDelete

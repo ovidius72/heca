@@ -21,7 +21,7 @@ use heca_renderer::grid::GridRenderer;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use std::sync::Arc;
-use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
+use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
 
 #[cfg(test)]
@@ -174,7 +174,7 @@ fn apply_macos_vibrancy(window: &Window, vibrancy: heca_config::appearance::Vibr
 pub(crate) async fn init_state(
     app_config: &AppConfig,
     event_loop: &ActiveEventLoop,
-    event_proxy: EventLoopProxy<crate::app::events::AppEvent>,
+    event_proxy: crate::app::events::WindowProxy,
     launch_mode: crate::app::cli::LaunchMode,
 ) -> std::io::Result<Box<AppState>> {
     let redraw_proxy = event_proxy.clone();

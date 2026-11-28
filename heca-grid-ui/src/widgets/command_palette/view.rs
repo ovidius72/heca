@@ -41,6 +41,8 @@ pub(super) struct RowData {
     pub trailing: Option<Rc<dyn Fn() -> crate::WidgetModel>>,
     /// What the row shows instead of the standard one, when its command says.
     pub content: Option<Rc<dyn Fn() -> crate::WidgetModel>>,
+    /// What else can be done with the row — its ⋯ button, right-click and keyboard menu.
+    pub menu: Option<crate::widgets::ContextMenu>,
 }
 
 /// A row chosen by the pointer, by command index, for the palette to run on its next look.
@@ -68,29 +70,31 @@ pub(super) struct ViewState {
     /// Set when the user edits the query; the palette ranks again on its next tick.
     pub query_changed: Signal<bool>,
     pub placeholder: Signal<String>,
+    /// The ⋯ button's tooltip when it opens a menu.
+    pub menu_tip: Signal<String>,
 }
 
 /// The whole palette: the overlay and what it holds.
 pub(super) fn view(state: &ViewState) -> Overlay {
     let query_changed = state.query_changed;
-    let query = Input::new()
-        .value(state.query)
-        .placeholder(state.placeholder)
-        .placeholder_on_focus(true)
-        .follow_focus(state.open)
-        .width(Length::FULL)
-        .on_change(move |_| query_changed.set(true));
     let list = {
         let rows = state.rows.clone();
         let (selected, results, picks) = (state.selected, state.results, state.picks.clone());
         let size = state.size;
+        let menu_tip = state.menu_tip;
         List::new(state.results)
             .render_item(move |&(_, index), _| {
                 let rows = rows.borrow();
                 match &rows[index].content {
                     Some(make) => make(),
-                    None => crate::WidgetModel::new(row(&rows[index], index, selected)),
+                    None => crate::WidgetModel::new(row(&rows[index], index, selected, menu_tip)),
                 }
+            })
+            // What else can be done with a row — declared on the row itself, so a right-click on it
+            // and the keyboard's menu action on the selected one both find it.
+            .item_menu({
+                let rows = state.rows.clone();
+                move |&(_, index), _| rows.borrow()[index].menu.clone()
             })
             .selected(state.list_selected)
             .on_choose(move |at| {
@@ -103,6 +107,17 @@ pub(super) fn view(state: &ViewState) -> Overlay {
             // As many rows as the palette's size shows before it scrolls.
             .visible_items(move || panel_metrics(size.get()).1)
     };
+    // The focus stays in the field while the arrows move the selection; the keyboard acts on the
+    // list's selected row — its menu opens on the keyboard's menu action.
+    let selected_row = list.selected_item();
+    let query = Input::new()
+        .active_descendant(selected_row)
+        .value(state.query)
+        .placeholder(state.placeholder)
+        .placeholder_on_focus(true)
+        .follow_focus(state.open)
+        .width(Length::FULL)
+        .on_change(move |_| query_changed.set(true));
     // The panel's body: the query field over the list, as wide as the palette's size says. A
     // column, so in a short window the list gives way and the field keeps its height.
     let size = state.size;
@@ -127,7 +142,12 @@ pub(super) fn view(state: &ViewState) -> Overlay {
 }
 
 /// What one result row shows — the [`List`] puts it in the row it selects.
-fn row(data: &RowData, index: usize, selected: Signal<Option<usize>>) -> Grid {
+fn row(
+    data: &RowData,
+    index: usize,
+    selected: Signal<Option<usize>>,
+    menu_tip: Signal<String>,
+) -> Grid {
     let is_selected = move || selected.get() == Some(index);
     let title = Label::new("")
         .text(data.title)
@@ -166,12 +186,12 @@ fn row(data: &RowData, index: usize, selected: Signal<Option<usize>>) -> Grid {
                 .truncate(Ellipsis::End),
         );
     }
-    // Side by side, starting a new line when they do not fit — a row with ten one-key shortcuts
-    // (`1` … `0`) takes a line or two, not ten. A shortcut of several keys stays together.
-    let shortcuts = Flex::row()
-        .wrap(true)
-        .justify("end")
-        .gap(Spacing::Sm)
+    // **One shortcut per line**, right-aligned: side by side, `^h ^← λh λ←` read as one long
+    // chord, and nobody could tell where one binding ended and the next began. A shortcut of
+    // several keys stays together on its line.
+    let shortcuts = Flex::column()
+        .align("end")
+        .gap(Spacing::Xs)
         .max_width(Length::Em(SHORTCUTS_MAX_EM))
         .child(
             data.chords
@@ -195,7 +215,7 @@ fn row(data: &RowData, index: usize, selected: Signal<Option<usize>>) -> Grid {
                 .collect::<Vec<_>>(),
         );
     Grid::new()
-        .template_column("auto 1fr auto")
+        .template_column("auto 1fr auto auto")
         .align("start")
         .gap(Spacing::Sm)
         .width(Length::FULL)
@@ -207,5 +227,52 @@ fn row(data: &RowData, index: usize, selected: Signal<Option<usize>>) -> Grid {
             },
             crate::WidgetModel::new(text),
             crate::WidgetModel::new(shortcuts),
+            match &data.menu {
+                // On the selected row — and the row under the pointer is the selected one: the list
+                // selects what the pointer moves onto.
+                Some(menu) => crate::WidgetModel::new(more_button(menu, is_selected, menu_tip)),
+                // No menu: the column holds nothing.
+                None => crate::WidgetModel::new(Flex::row()),
+            },
         ])
+}
+
+/// **The ⋯ at the end of a row with a menu** — the same icon button a pane's header uses (a
+/// `Button` showing only its icon), outlined so it reads as a control and never as a key: the
+/// keycaps beside it are chips, this is a framed button that brightens to the accent on hover.
+/// Centred on the row's height. Drawn while the row is the selected one (the list selects the row
+/// the pointer moves onto), its box kept the rest of the time so the row does not move. It opens the menu where
+/// it was clicked; a menu of one entry is not opened — the button runs that entry, and its words
+/// (shown on hover) name it.
+fn more_button(
+    menu: &crate::widgets::ContextMenu,
+    shown: impl Fn() -> bool + 'static,
+    menu_tip: Signal<String>,
+) -> Flex {
+    use crate::builders::{EventExt, PresenceExt};
+    let items = menu.menu().clone().into_items();
+    let single = (items.len() == 1)
+        .then(|| items.into_iter().next())
+        .flatten();
+    let words = single
+        .as_ref()
+        .and_then(|item| item.label_text().map(str::to_string))
+        .unwrap_or_else(|| menu_tip.get_untracked());
+    let menu = menu.clone();
+    let button = crate::widgets::Button::new(words)
+        .icon(Glyph::DotsThree)
+        .icon_only(true)
+        .variant(crate::widgets::ButtonVariant::Outline)
+        .size(WidgetSize::Small)
+        .visible(shown)
+        // A button's click is its own: the row is not chosen by it.
+        .on_click(move |ev| match &single {
+            Some(item) => item.activate(),
+            None => menu.show(ev.event()),
+        });
+    // Apart from the keycaps by a step of the theme's spacing, and centred on the row.
+    Flex::row()
+        .padding_left(Spacing::Xs)
+        .align_self("center")
+        .child(button)
 }

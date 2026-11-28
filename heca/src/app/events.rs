@@ -18,7 +18,68 @@ use crate::mouse;
 use heca_core::layout::Point;
 use heca_grid_ui::{Event, Handled, PointerButton, RawPointer, RawPointerKind};
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
-use winit::event_loop::ActiveEventLoop;
+/// **Which window an event is for** — given when the window is built, before the system window
+/// exists, so everything the window installs can say where its events go.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct WindowKey(u64);
+
+impl WindowKey {
+    /// A key no window has had in this run.
+    pub(crate) fn next() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        Self(NEXT.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
+/// **What the event loop is told** — one window's [`AppEvent`], or something for the program as a
+/// whole (another window).
+#[derive(Clone, Debug)]
+pub enum LoopEvent {
+    /// For one window.
+    Window { window: WindowKey, event: AppEvent },
+    /// Open another window on the same server, on `session` (or the most recent running one).
+    NewWindow { session: Option<String> },
+}
+
+/// The event loop has ended: the program is closing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LoopEnded;
+
+/// **Where one window's events go** — the event loop's proxy, with the window named, so a timer, a
+/// terminal's reader thread or a widget's emitter in window two reaches window two. Cloned freely
+/// and safe to send to a background thread, like the proxy it wraps.
+#[derive(Clone)]
+pub struct WindowProxy {
+    proxy: winit::event_loop::EventLoopProxy<LoopEvent>,
+    window: WindowKey,
+}
+
+impl WindowProxy {
+    pub(crate) fn new(
+        proxy: winit::event_loop::EventLoopProxy<LoopEvent>,
+        window: WindowKey,
+    ) -> Self {
+        Self { proxy, window }
+    }
+
+    /// Send `event` to this window. An error only once the event loop has ended — the program is
+    /// closing, and there is nobody left to tell.
+    pub fn send_event(&self, event: AppEvent) -> Result<(), LoopEnded> {
+        self.proxy
+            .send_event(LoopEvent::Window {
+                window: self.window,
+                event,
+            })
+            .map_err(|_| LoopEnded)
+    }
+
+    /// Ask the program for another window on `session` (or the most recent running one).
+    pub(crate) fn new_window(&self, session: Option<String>) {
+        let _ = self.proxy.send_event(LoopEvent::NewWindow { session });
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum AppEvent {
     CloseWindow,
@@ -46,14 +107,16 @@ pub enum AppEvent {
 }
 
 pub(crate) fn handle_window_event(
-    event_loop: &ActiveEventLoop,
     registry: &ActionRegistry,
     keymaps: &Keymaps,
     state: &mut AppState,
     event: WindowEvent,
 ) {
     match event {
-        WindowEvent::CloseRequested => event_loop.exit(),
+        // Closing a window closes that window; the program ends with its last one.
+        WindowEvent::CloseRequested => {
+            let _ = state.event_proxy.send_event(AppEvent::CloseWindow);
+        }
         WindowEvent::Resized(phys) if phys.width > 0 && phys.height > 0 => {
             state.surface_config.width = phys.width;
             state.surface_config.height = phys.height;

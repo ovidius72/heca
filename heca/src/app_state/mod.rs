@@ -1,6 +1,5 @@
 //! The window's state, and the small types it is built from.
 
-use crate::app::events::AppEvent;
 pub use crate::app::terminal_host::selection::SelectionState;
 use heca_config::appearance::AppearanceConfig;
 use heca_config::font::FontConfig;
@@ -16,7 +15,6 @@ use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use std::collections::HashMap;
 use std::sync::Arc;
-use winit::event_loop::EventLoopProxy;
 use winit::keyboard::ModifiersState;
 use winit::window::Window;
 

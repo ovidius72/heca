@@ -142,7 +142,7 @@ pub(crate) fn of_pane(state: &AppState, pane_id: PaneId) -> Option<&Terminal> {
 /// input goes — to the one host handler that holds the policy needing state. A terminal in a pane
 /// also focuses that pane when its controls are used; one no pane owns has no pane to focus.
 fn seams(
-    proxy: winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
+    proxy: crate::app::events::WindowProxy,
     pane: Option<PaneId>,
     terminal: TerminalId,
 ) -> input::Seams {

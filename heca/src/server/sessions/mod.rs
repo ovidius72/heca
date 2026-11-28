@@ -57,6 +57,7 @@ pub(crate) struct WindowInfo {
 /// suffix is never hardcoded. `folder` is already shown home-relative by the caller.
 pub(crate) fn window_title(
     app: &str,
+    session: &str,
     folder: &str,
     ordinal: u64,
     base: &str,
@@ -65,6 +66,7 @@ pub(crate) fn window_title(
     let format = if ordinal <= 1 { base } else { numbered };
     format
         .replace("{app}", app)
+        .replace("{session}", session)
         .replace("{folder}", folder)
         .replace("{number}", &ordinal.to_string())
 }
@@ -207,19 +209,19 @@ mod tests {
 
     #[test]
     fn the_first_window_has_no_number_and_later_ones_do() {
-        let base = "{app} - {folder}";
-        let numbered = "{app} - {folder} - #{number}";
+        let base = "{app} - {session} ({folder})";
+        let numbered = "{app} - {session} ({folder}) - #{number}";
         assert_eq!(
-            window_title("Heca Pro", "~/projects/heca", 1, base, numbered),
-            "Heca Pro - ~/projects/heca"
+            window_title("Heca Pro", "work", "~/projects/heca", 1, base, numbered),
+            "Heca Pro - work (~/projects/heca)"
         );
         assert_eq!(
-            window_title("Heca Pro", "~/projects/heca", 2, base, numbered),
-            "Heca Pro - ~/projects/heca - #2"
+            window_title("Heca Pro", "work", "~/projects/heca", 2, base, numbered),
+            "Heca Pro - work (~/projects/heca) - #2"
         );
         assert_eq!(
-            window_title("heca", "~/projects/heca", 5, base, numbered),
-            "heca - ~/projects/heca - #5"
+            window_title("heca", "work", "~/projects/heca", 5, base, numbered),
+            "heca - work (~/projects/heca) - #5"
         );
     }
 }

@@ -102,8 +102,8 @@ pub enum Event {
     TripleClick(PointerEvent),
     /// Press and release on the same widget, with the **right** button.
     ///
-    /// Named for what happened, not for the menu it usually opens: `Shift+F10` and the Menu key
-    /// emit this too, and a widget may answer it with anything.
+    /// Named for what happened, not for the menu it usually opens: a keyboard binding (heca's
+    /// `prefix+>`) emits this too, and a widget may answer it with anything.
     RightClick(PointerEvent),
     /// Press and release on the same widget, with the **middle** button.
     MiddleClick(PointerEvent),

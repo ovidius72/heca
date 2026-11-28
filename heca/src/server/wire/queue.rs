@@ -200,6 +200,7 @@ impl Message for super::ServerMsg {
                 | super::ServerMsg::SessionTerminated { .. }
                 | super::ServerMsg::SessionDeleted { .. }
                 | super::ServerMsg::SessionDetached { .. }
+                | super::ServerMsg::SessionLeft { .. }
                 | super::ServerMsg::ProjectionReady { .. }
         )
     }

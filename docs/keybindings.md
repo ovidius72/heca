@@ -11,6 +11,36 @@ they apply**; all five go through the same keymap and the same action registry.
 | `[[keys.mode]]` + `[[keys.mode.bindings]]` | yes | while that mode is active |
 | `[[keys.surface]]` | yes (via `[[keys.surface.bind]]`) | while that surface holds the keyboard |
 
+## How a key is written
+
+| Written | Means |
+|---|---|
+| `h` | the `h` key on its own |
+| `Ctrl+h` | `+` joins keys **pressed together**: Ctrl held, then `h` |
+| `Ctrl+Shift+l` | any number of modifiers (`Ctrl`, `Alt`, `Shift`, `Meta`/`Cmd`) and one key |
+| `prefix+h` | `prefix+` means **after the prefix**: press the prefix (`[keys] prefix`, default `Ctrl+b`), let go, then `h` |
+| `prefix+Ctrl+o` | after the prefix, `Ctrl` and `o` together |
+| `prefix+Ctrl+s r` | a space means **then**: the prefix, `Ctrl+s`, then `r` — a key sequence |
+| `["prefix+h", "prefix+ArrowLeft"]` or `"prefix+h, prefix+ArrowLeft"` | several keys for one action |
+
+Letters match whatever their case (`Enter` and `enter` are one key); a shifted symbol is written as
+the symbol itself (`prefix+#`, `prefix+>`). Named keys: `Enter`, `Escape`, `Tab`, `Space`,
+`Backspace`, `Delete`, `ArrowLeft`/`ArrowRight`/`ArrowUp`/`ArrowDown`, `Home`, `End`, `PageUp`,
+`PageDown`, `F1`…`F12`. After the prefix, heca waits `[keys] prefix_timeout_ms` (default 1000) for
+the next key.
+
+**Key sequences** start after the prefix (`[keys]` and `[[keys.bind]]`); a sequence of direct keys is
+refused with a note on stderr, because it would hold back every key typed into a terminal. After a key
+that begins a sequence heca waits `prefix_timeout_ms` for the next one, as neovim waits `timeoutlen`:
+a key that continues the sequence moves on, one that completes it runs it, and a key that continues
+nothing — or the wait running out — does what the keys so far do alone (`prefix+s` still opens the
+selection when nothing follows) and is then handled as a key of its own. The status bar shows the keys
+pressed so far. The shipped groups: sessions `prefix+Ctrl+s …`, the sidebar's folds
+`prefix+Shift+z …`, names `prefix+Shift+u …`, `prefix+Shift+a i` installs the `heca` command.
+
+A key inside a mode is written alone under the mode (`[[keys.mode.bindings]]`) and is reached by
+opening the mode first; the palette and `heca --show-keys` show both, `prefix+r Ctrl+h`.
+
 Your file is deep-merged over `keybindings.default.toml`, so you write only what you change. Put it
 in `~/.config/heca/keybindings.toml` — or in `config.toml`, which is merged with it.
 
@@ -153,14 +183,19 @@ action = "toggle_layer"
 args   = { name = "heca.expose" }
 ```
 
-The default palette shortcuts share the registered `command_palette` action:
+The default palette shortcuts:
 
-| List | Default binding | Argument |
+| List | Default binding | Action |
 |---|---|---|
-| Actions | `prefix+p` | none |
-| Panes | `prefix+o` | `mode = "pane"` |
-| Workspaces | `prefix+Ctrl+o` | `mode = "workspace"` |
-| Sessions | `prefix+#` | `mode = "session"` |
+| Actions | `prefix+p` | `command_palette` |
+| Panes | `prefix+o` | `command_palette`, `mode = "pane"` |
+| Workspaces | `prefix+Ctrl+o` | `command_palette`, `mode = "workspace"` |
+| Sessions | `prefix+#` | `list_sessions` (in a window it opens the `#` list; over RPC it returns the sessions as JSON) |
+
+**A key shows on the row of the action it calls, with the arguments it calls it with.** The
+palette's "Command Palette" row shows `prefix+p` only — `prefix+o` calls the same action with
+`mode = "pane"`, which is a different thing to press. `heca --show-keys` lists each binding with its
+arguments the same way (`command_palette mode=pane`).
 
 Press your configured prefix, then the remaining key. The default prefix is `Ctrl+b`.
 For sessions, press the prefix and then `#`; no extra character is needed in the palette.

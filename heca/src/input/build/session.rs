@@ -29,8 +29,15 @@ pub(super) fn build_session(
             name: get_string(args, "name")?,
         },
         "new_session" => WmAction::NewSession,
-        "rename_session" => WmAction::RenameSession,
+        "rename_session" => WmAction::RenameSession {
+            session: get_string(args, "session"),
+        },
         "detach_session" => WmAction::DetachSession,
+        "close_window" => WmAction::CloseWindow,
+        "last_session" => WmAction::LastSession,
+        "new_window" => WmAction::NewWindow {
+            session: get_string(args, "session"),
+        },
         "reconnect_session" => WmAction::ReconnectSession,
         "follow" => WmAction::Follow {
             target: get_string(args, "target").and_then(|value| value.parse().ok()),

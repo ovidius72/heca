@@ -46,4 +46,5 @@ pub use crate::event::{
 };
 
 mod frame;
+pub(crate) use frame::set_frame_waker;
 pub use frame::{FrameWake, frame_served, frame_waker, install_frame_request, request_frame};

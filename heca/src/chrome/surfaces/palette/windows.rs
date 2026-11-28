@@ -25,6 +25,7 @@ pub(super) fn entries(
             detail: None,
             icon: None,
             shortcuts: Vec::new(),
+            actions: Vec::new(),
             intent: Some(InteractionIntent::ActivateAction(WmAction::Follow {
                 target: None,
             })),
@@ -46,6 +47,7 @@ pub(super) fn entries(
                 detail: None,
                 icon: None,
                 shortcuts: Vec::new(),
+                actions: Vec::new(),
                 intent: Some(InteractionIntent::ActivateAction(WmAction::Follow {
                     target: Some(window.id),
                 })),

@@ -22,7 +22,7 @@ pub struct ChromeIntentEmitter {
 impl ChromeIntentEmitter {
     /// A sink that stamps everything it posts with `source`.
     pub(crate) fn new(
-        event_proxy: &winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
+        event_proxy: &crate::app::events::WindowProxy,
         source: crate::app::interaction::InteractionSource,
     ) -> Self {
         let event_proxy = event_proxy.clone();
@@ -96,7 +96,7 @@ impl ChromeIntentEmitter {
 /// Take the id from [`LayerRegistry::reserve_id`](crate::chrome::LayerRegistry::reserve_id) when the tree
 /// has to be built before the layer is inserted, which is the usual case.
 pub(crate) fn layer_emitter(
-    event_proxy: &winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
+    event_proxy: &crate::app::events::WindowProxy,
     key: crate::app::interaction::SurfaceKey,
 ) -> ChromeIntentEmitter {
     ChromeIntentEmitter::new(

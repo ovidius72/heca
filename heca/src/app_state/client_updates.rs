@@ -34,6 +34,18 @@ impl AppState {
             self.notifications.clear();
             self.rebuild_toasts();
         }
+        if let Some((name, deleted)) = &update.left_session {
+            let words = &self.settings.session_text;
+            let says = if *deleted {
+                &words.moved_deleted
+            } else {
+                &words.moved_terminated
+            };
+            self.status_note = Some(
+                says.replace("{name}", name)
+                    .replace("{to}", &self.client.session.name),
+            );
+        }
         if let Some(content) = update.content {
             self.client.prune(&content);
             let session = content.rebuild(self.client.session.id, self.session.options.clone());

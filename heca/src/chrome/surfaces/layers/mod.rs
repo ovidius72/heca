@@ -115,10 +115,7 @@ impl LayerRegistry {
     }
 
     /// Say where the actions a surface's widgets dispatch go. Called once, at startup.
-    pub(crate) fn connect(
-        &mut self,
-        events: winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
-    ) {
+    pub(crate) fn connect(&mut self, events: crate::app::events::WindowProxy) {
         self.emit_through(move |surface| crate::chrome::layer_emitter(&events, surface));
     }
 
@@ -405,6 +402,30 @@ impl LayerRegistry {
     /// surface, and never asked for the frame that paints it gone: the exposé stuck at a tenth
     /// opacity until some other input forced a repaint, stayed modal, and swallowed `ctrl+h/j/k/l`
     /// for ever after. **The tree ticks. This only reconciles.**
+    /// **Every surface still dissolving goes now** — a closed palette mid-fade, a dialog on its way
+    /// out. Called when the window is about to change what it shows (another session): the last
+    /// picture drawn before the change is held on screen while the new one loads, and it must not
+    /// hold a surface that is already gone. Returns whether anything went.
+    pub(crate) fn cut_exits(&mut self, window: &mut heca_grid_ui::widgets::Flex) -> bool {
+        let leaving: Vec<LayerId> = self
+            .layers
+            .iter()
+            .filter(|l| l.visible && self.is_leaving(window, l.id))
+            .map(|l| l.id)
+            .collect();
+        for id in &leaving {
+            let doomed = self.layers.iter().any(|l| l.id == *id && l.doomed);
+            if doomed {
+                crate::chrome::remove_surface(window, &crate::chrome::surface_slot(*id));
+            } else if let Some(l) = self.layers.iter_mut().find(|l| l.id == *id) {
+                l.visible = false;
+            }
+        }
+        self.layers
+            .retain(|l| !(l.doomed && leaving.contains(&l.id)));
+        !leaving.is_empty()
+    }
+
     pub(crate) fn retire_finished_exits(
         &mut self,
         window: &mut heca_grid_ui::widgets::Flex,

@@ -8,7 +8,7 @@ use super::global::merge_by;
 use super::names::{action_ref_from_config, component_action};
 use crate::app::conflicts::Conflicts;
 use crate::input::WmAction;
-use crate::keymap::{ActionRef, BindingIndex, KeyCombo, KeymapRegistry, index_binding};
+use crate::keymap::{ActionRef, BindingIndex, BoundKey, KeyCombo, KeymapRegistry, index_binding};
 use std::collections::{BTreeMap, HashMap};
 
 /// Bind a component's **runtime-registered** key into its layer, unless the user already spoke.
@@ -46,7 +46,7 @@ pub fn register_component_keybinding(
             combo,
             action_ref_from_config(action, &HashMap::new()),
         );
-        index_binding(index, action, "plugin", key_str);
+        index_binding(index, action, BoundKey::new("plugin", key_str));
     }
 }
 
@@ -66,10 +66,13 @@ pub(super) fn bind_global_focus(
         let action = ActionRef::Builtin(WmAction::ToggleDock {
             dock: Some(entry.target.clone()),
         });
+        let args = HashMap::from([("dock".to_string(), entry.target.clone())]);
         let written = Written {
             action: "toggle_dock",
             layer: &entry.source,
             key: &entry.key,
+            args: &args,
+            after: "",
         };
         bind_flat(flat, action, written, conflicts, index);
     }
@@ -192,6 +195,8 @@ pub fn build_component_keymaps(
                         action: &id,
                         layer: &label,
                         key: key_str.trim(),
+                        args: &no_args,
+                        after: "",
                     },
                     conflicts,
                     index,
@@ -210,6 +215,8 @@ pub fn build_component_keymaps(
                         action: &id,
                         layer: &bind_label,
                         key: key_str,
+                        args: &binding.args,
+                        after: "",
                     },
                     conflicts,
                     index,

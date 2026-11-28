@@ -89,7 +89,7 @@ fn command_palette_describes_a_command_on_a_second_line() {
 /// **An action bound three times draws its bindings side by side**, at the row's right edge, and the
 /// text beside them stops before the first cap — so text and chips never overlap.
 #[test]
-fn command_palette_sets_a_rows_bindings_side_by_side_at_its_right_edge() {
+fn command_palette_sets_a_rows_bindings_one_per_line_at_its_right_edge() {
     use heca_grid_ui::widgets::{KeyCap, NfGlyph};
     use heca_grid_ui::{Command, CommandPalette};
     let theme = Theme::default();
@@ -131,8 +131,22 @@ fn command_palette_sets_a_rows_bindings_side_by_side_at_its_right_edge() {
     rows.dedup();
     assert_eq!(
         rows.len(),
-        1,
-        "three short bindings fit side by side on one line, got rows at {rows:?}",
+        3,
+        "three bindings, one per line — side by side they read as one long chord; got rows at {rows:?}",
+    );
+    // Right-aligned: each binding ends at the row's right edge.
+    let right = |y: f64| {
+        chips
+            .iter()
+            .filter(|r| (r.loc.y * 10.0).round() / 10.0 == y)
+            .map(|r| r.loc.x + r.size.w)
+            .fold(f64::MIN, f64::max)
+    };
+    let ends: Vec<f64> = rows.iter().map(|y| right(*y).round()).collect();
+    assert!(
+        // Within the pixel a cap's own rounding can leave.
+        ends.windows(2).all(|w| (w[0] - w[1]).abs() <= 1.0),
+        "every binding ends at the same right edge: {ends:?}"
     );
     // The row's own title stops before its caps, or text and chips would overlap on a narrow row. A
     // row with no bindings gives its text the whole width, so only the row's own caps count.
@@ -151,9 +165,9 @@ fn command_palette_sets_a_rows_bindings_side_by_side_at_its_right_edge() {
     );
 }
 
-/// **A row bound to many keys stays a line or two tall.** Its bindings wrap onto another line only
-/// when they do not fit, instead of taking a line each — ten one-key bindings (`1` … `0`) once made
-/// a row ten caps tall.
+/// **A row grows to hold its bindings, one per line** — and only its own row: the rows around it
+/// keep their height. (Ten one-key bindings make a row ten lines tall; that is the price of reading
+/// each binding apart, which side by side nobody could.)
 #[test]
 fn command_palette_rows_are_only_as_tall_as_their_own_bindings() {
     use heca_grid_ui::widgets::KeyCap;
@@ -184,12 +198,12 @@ fn command_palette_rows_are_only_as_tall_as_their_own_bindings() {
             })
             .unwrap_or_else(|| panic!("{text} is painted"))
     };
-    // The row of ten bindings is at most twice as tall as a plain one: its caps took a line or two.
+    // The row of ten bindings is taller than a plain one; the plain rows are not touched.
     let tall_gap = label_y("Close Pane") - label_y("Paste Clipboard");
     let plain_gap = label_y("Reload Config") - label_y("Close Pane");
     assert!(
-        tall_gap <= 2.0 * plain_gap,
-        "ten bindings made the row {tall_gap}px tall against {plain_gap}px for a plain one",
+        tall_gap > 2.0 * plain_gap,
+        "ten bindings, one per line, made the row only {tall_gap}px tall against {plain_gap}px",
     );
 }
 

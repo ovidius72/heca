@@ -42,7 +42,6 @@ pub(crate) struct SessionRuntime {
     resume_harness: bool,
     /// The server end of each attached client. A detached client is dropped from here.
     clients: Vec<Rc<Connection>>,
-    next_window_ordinal: u64,
     registry: crate::actions::ActionRegistry,
     catalog: crate::actions::ActionCatalog,
     store: crate::chrome::SharedChromeState,
@@ -94,7 +93,6 @@ impl SessionRuntime {
             resume_harness: defaults.resume_harness,
             session,
             clients: Vec::new(),
-            next_window_ordinal: 1,
             registry,
             catalog,
             store,
@@ -289,13 +287,18 @@ impl SessionRuntime {
         )
     }
 
+    /// A window joins the session, with **the lowest number no window on it holds now** — a window
+    /// alone is the first (its title carries no number), a second one is #2, and a number a window
+    /// left is the next one's. It keeps its number while it stays, whoever joins or leaves; a
+    /// restart of the session keeps its windows, and their numbers with them.
     pub(super) fn add_connection(&mut self, client: Rc<Connection>) {
-        let Some(next) = self.next_window_ordinal.checked_add(1) else {
-            client.close();
-            return;
-        };
-        client.window_ordinal.set(self.next_window_ordinal);
-        self.next_window_ordinal = next;
+        let held: std::collections::HashSet<u64> = self
+            .clients
+            .iter()
+            .map(|c| c.window_ordinal.get())
+            .collect();
+        let free = (1..).find(|n| !held.contains(n)).unwrap_or(1);
+        client.window_ordinal.set(free);
         self.clients.push(client);
     }
 

@@ -8,6 +8,7 @@ pub(super) fn entries(
     sessions: &[SessionInfo],
     current: &SessionInfo,
     words: &heca_config::settings::SessionText,
+    catalog: &crate::actions::ActionCatalog,
 ) -> Vec<PaletteEntry> {
     sessions
         .iter()
@@ -46,12 +47,57 @@ pub(super) fn entries(
                 )),
                 icon: None,
                 shortcuts: Vec::new(),
+                actions: session_actions(session, catalog),
                 intent: Some(InteractionIntent::ActivateAction(WmAction::SwitchSession {
                     name: session.name.clone(),
                 })),
             }
         })
         .collect()
+}
+
+/// **What else can be done with a session, from its row** — rename it (the rename dialog, as from
+/// a key), terminate it or restart it (whichever its state allows), delete it. The current session
+/// is not left out: closing it moves the window to the most recent session still running. Each is
+/// the catalog's own action with the session named, read under the catalog's label, so it is the
+/// same action — judged and confirmed the same way — as from a key, RPC or a plugin.
+fn session_actions(
+    session: &SessionInfo,
+    catalog: &crate::actions::ActionCatalog,
+) -> Vec<super::model::RowAction> {
+    use super::model::RowAction;
+    let label = |action: &str| catalog.label(action).unwrap_or(action).to_string();
+    let target = Some(session.name.clone());
+    let mut actions = vec![RowAction {
+        label: label("rename_session"),
+        intent: InteractionIntent::ActivateAction(WmAction::RenameSession {
+            session: target.clone(),
+        }),
+        danger: false,
+    }];
+    actions.push(if session.status == SessionStatus::Terminated {
+        RowAction {
+            label: label("restart_session"),
+            intent: InteractionIntent::ActivateAction(WmAction::RestartSession {
+                session: target.clone(),
+            }),
+            danger: false,
+        }
+    } else {
+        RowAction {
+            label: label("terminate_session"),
+            intent: InteractionIntent::ActivateAction(WmAction::TerminateSession {
+                session: target.clone(),
+            }),
+            danger: false,
+        }
+    });
+    actions.push(RowAction {
+        label: label("delete_session"),
+        intent: InteractionIntent::ActivateAction(WmAction::DeleteSession { session: target }),
+        danger: true,
+    });
+    actions
 }
 
 /// Candidate collection is separate from matching: the palette owns fuzzy ranking and input.
@@ -179,7 +225,12 @@ mod tests {
             windows: 2,
             agents: 3,
         };
-        let rows = entries(std::slice::from_ref(&session), &session, &words);
+        let rows = entries(
+            std::slice::from_ref(&session),
+            &session,
+            &words,
+            &crate::actions::ActionCatalog::with_builtins(),
+        );
         let row = &rows[0];
         assert_eq!(row.label, session.name);
         assert_eq!(row.description, "/workspace/long/project/path");
@@ -199,7 +250,12 @@ mod tests {
             id: SessionId(99),
             ..stopped.clone()
         };
-        let rows = entries(&[stopped], &other, &words);
+        let rows = entries(
+            &[stopped],
+            &other,
+            &words,
+            &crate::actions::ActionCatalog::with_builtins(),
+        );
         assert_eq!(
             rows[0].detail.as_deref(),
             Some("views=2; agents=3 / offline")
@@ -221,13 +277,27 @@ mod tests {
             agents: 0,
         };
         let words = heca_config::settings::SessionText::default();
-        assert!(entries(std::slice::from_ref(&current), &current, &words).is_empty());
+        assert!(
+            entries(
+                std::slice::from_ref(&current),
+                &current,
+                &words,
+                &crate::actions::ActionCatalog::with_builtins()
+            )
+            .is_empty()
+        );
         let stale = SessionInfo {
             status: SessionStatus::Active,
             ..current.clone()
         };
         assert!(
-            entries(&[stale], &current, &words).is_empty(),
+            entries(
+                &[stale],
+                &current,
+                &words,
+                &crate::actions::ActionCatalog::with_builtins()
+            )
+            .is_empty(),
             "current state wins over a stale directory"
         );
         let active = SessionInfo {
@@ -247,6 +317,7 @@ mod tests {
             &[current.clone(), active.clone(), stopped.clone()],
             &current,
             &words,
+            &crate::actions::ActionCatalog::with_builtins(),
         );
         assert_eq!(
             rows.iter()
@@ -254,7 +325,12 @@ mod tests {
                 .collect::<Vec<_>>(),
             [active.name.as_str(), stopped.name.as_str()]
         );
-        let rows = entries(std::slice::from_ref(&active), &active, &words);
+        let rows = entries(
+            std::slice::from_ref(&active),
+            &active,
+            &words,
+            &crate::actions::ActionCatalog::with_builtins(),
+        );
         assert_eq!(
             rows.len(),
             1,
@@ -337,5 +413,73 @@ mod tests {
                 "query {query}"
             );
         }
+    }
+
+    /// **Every session row carries its own actions** — the current one too: Rename (asking the
+    /// name, the session already chosen), Terminate or Restart as its state allows, and Delete,
+    /// drawn as destructive. Each names the session, so it acts on that row's session.
+    #[test]
+    fn every_session_row_offers_rename_close_or_restart_and_delete_naming_its_session() {
+        let words = heca_config::settings::SessionText::default();
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        let session = |id: u64, name: &str, status: SessionStatus| SessionInfo {
+            key: None,
+            id: heca_core::layout::SessionId(id),
+            name: name.into(),
+            folder: None,
+            label: None,
+            status,
+            windows: 0,
+            agents: 0,
+        };
+        let current = session(1, "work", SessionStatus::Active);
+        let stopped = session(2, "old", SessionStatus::Terminated);
+        let rows = entries(
+            &[current.clone(), stopped.clone()],
+            &current,
+            &words,
+            &catalog,
+        );
+        let row = |name: &str| rows.iter().find(|r| r.label == name).expect(name);
+        let labels = |name: &str| {
+            row(name)
+                .actions
+                .iter()
+                .map(|a| a.label.clone())
+                .collect::<Vec<_>>()
+        };
+        let named = |action: &str| catalog.label(action).unwrap().to_string();
+        assert_eq!(
+            labels("work"),
+            [
+                named("rename_session"),
+                named("terminate_session"),
+                named("delete_session")
+            ],
+            "the current session is not left out"
+        );
+        assert_eq!(
+            labels("old"),
+            [
+                named("rename_session"),
+                named("restart_session"),
+                named("delete_session")
+            ]
+        );
+        assert!(
+            matches!(
+                &row("old").actions[0].intent,
+                InteractionIntent::ActivateAction(WmAction::RenameSession { session: Some(name) })
+                    if name == "old"
+            ),
+            "Rename opens the rename dialog for that row's session"
+        );
+        let delete = row("old").actions.last().unwrap();
+        assert!(delete.danger);
+        assert!(matches!(
+            &delete.intent,
+            InteractionIntent::ActivateAction(WmAction::DeleteSession { session: Some(name) })
+                if name == "old"
+        ));
     }
 }

@@ -21,16 +21,30 @@ pub struct WrittenKey {
     pub after_leader: bool,
     /// The keys themselves, without the leader.
     pub combo: KeyCombo,
+    /// **The keys pressed after it, in order** — a sequence. `prefix+Shift+s r` is `Shift+s` after
+    /// the leader, then `r`. Empty for a single key.
+    pub then: Vec<KeyCombo>,
 }
 
 impl WrittenKey {
-    /// Read a key as written, `prefix+` and all.
+    /// Read a key as written, `prefix+` and all. A space separates the steps of a sequence:
+    /// `+` joins keys pressed together, a space says "then".
     pub fn parse(written: &str) -> Self {
-        let (after_leader, keys) = split_leader(written);
+        let steps = written_steps(written);
+        let mut steps = steps.iter();
+        let (after_leader, keys) = split_leader(steps.next().map_or("", String::as_str));
         Self {
             after_leader,
             combo: KeyCombo::parse(keys),
+            then: steps.map(|step| KeyCombo::parse(step)).collect(),
         }
+    }
+
+    /// Every key of it, in order — the first and those pressed after it.
+    pub fn keys(&self) -> Vec<KeyCombo> {
+        std::iter::once(self.combo.clone())
+            .chain(self.then.iter().cloned())
+            .collect()
     }
 
     /// The flat layer this key binds in: [`LEADER_LAYER`] after the leader, else [`DIRECT_LAYER`].
@@ -41,6 +55,24 @@ impl WrittenKey {
             DIRECT_LAYER
         }
     }
+}
+
+/// **The steps of a written key, in order** — a space says "then", so `prefix+Shift+s r` is two
+/// steps; spaces beside a `+` belong to the step (`prefix+ Shift+w` is one). The one reader of that
+/// rule, for binding a key and for drawing it.
+pub fn written_steps(written: &str) -> Vec<String> {
+    let mut joined = String::new();
+    for word in written.split_whitespace() {
+        if !joined.is_empty() && !joined.ends_with('+') && !word.starts_with('+') {
+            joined.push(' ');
+        }
+        joined.push_str(word);
+    }
+    joined
+        .split(' ')
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 /// A written key split into whether it follows the leader and the keys themselves, as text — for a
@@ -175,7 +207,56 @@ pub struct BoundKey {
     pub layer: String,
     /// The combo exactly as it is typed, `prefix+` and all.
     pub key: String,
+    /// **The arguments the key calls the action with** — `{mode = "session"}` for `prefix+#` on
+    /// `command_palette`; empty for a plain binding. Kept so a surface asks for the key of the
+    /// action *as it calls it*: the palette's "Command Palette" row is `command_palette` with no
+    /// arguments and must not wear `prefix+#`, which opens the session list.
+    pub args: BindingArgs,
+    /// **The key that opens the mode this binding lives in**, as written (`prefix+r` for resize) —
+    /// `None` for a key pressed straight away. A key inside a mode is reached by pressing this first,
+    /// so a surface showing it shows both: `Ctrl+h` alone would read as a key that works anywhere.
+    pub after: Option<String>,
 }
+
+impl BoundKey {
+    /// A key bound in `layer`, pressed straight away and calling its action with no arguments.
+    pub fn new(layer: &str, key: &str) -> Self {
+        Self {
+            layer: layer.to_string(),
+            key: key.to_string(),
+            args: BindingArgs::new(),
+            after: None,
+        }
+    }
+
+    /// The arguments the key calls its action with.
+    pub fn args(mut self, args: &std::collections::HashMap<String, String>) -> Self {
+        self.args = args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        self
+    }
+
+    /// The key that opens the mode this one lives in — an empty one (a mode entered by focus)
+    /// leaves the key pressed straight away.
+    pub fn after(mut self, trigger: &str) -> Self {
+        let trigger = trigger.trim();
+        self.after = (!trigger.is_empty()).then(|| trigger.to_string());
+        self
+    }
+
+    /// **The keys to press, in order**, as written and separated by a space — `prefix+r Ctrl+h`
+    /// for a key inside the resize mode, the key alone otherwise. What every surface showing a
+    /// binding draws.
+    pub fn sequence(&self) -> String {
+        match &self.after {
+            Some(first) => format!("{first} {}", self.key),
+            None => self.key.clone(),
+        }
+    }
+}
+
+/// A binding's arguments, sorted by name — one spelling for one set of arguments, whatever order
+/// the config file wrote them in.
+pub type BindingArgs = std::collections::BTreeMap<String, String>;
 
 /// Action id → every key bound to it, across **every** layer.
 ///
@@ -188,12 +269,8 @@ pub struct BoundKey {
 /// `keybindings.default.toml` — one nothing compared against, so the two could drift silently.
 pub type BindingIndex = std::collections::BTreeMap<String, Vec<BoundKey>>;
 
-/// Record that `action` answers to `key` in `layer`, keeping the list free of duplicates.
-pub fn index_binding(index: &mut BindingIndex, action: &str, layer: &str, key: &str) {
-    let bound = BoundKey {
-        layer: layer.to_string(),
-        key: key.to_string(),
-    };
+/// Record that `action` answers to `bound`, keeping the list free of duplicates.
+pub fn index_binding(index: &mut BindingIndex, action: &str, bound: BoundKey) {
     let entry = index.entry(action.to_string()).or_default();
     if !entry.contains(&bound) {
         entry.push(bound);
@@ -220,6 +297,18 @@ pub enum ActionRef {
 /// Registry that maps key combinations to actions, organized by input mode.
 pub struct KeymapRegistry {
     modes: HashMap<String, HashMap<KeyCombo, ActionRef>>,
+    /// **Key sequences**, per mode — every key of each, in order, and what it runs. A sequence's
+    /// first key may also be a key of its own (`prefix+s` and `prefix+s r`); see [`step`](Self::step).
+    sequences: HashMap<String, Vec<(Vec<KeyCombo>, ActionRef)>>,
+}
+
+/// **Where some keys pressed in a row stand** among a mode's sequences.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SequenceStep {
+    /// A sequence these keys complete.
+    pub complete: Option<ActionRef>,
+    /// Whether a longer sequence starts with these keys — the next key may still continue it.
+    pub continues: bool,
 }
 
 impl KeymapRegistry {
@@ -227,6 +316,7 @@ impl KeymapRegistry {
     pub fn new() -> Self {
         Self {
             modes: HashMap::new(),
+            sequences: HashMap::new(),
         }
     }
 
@@ -236,6 +326,46 @@ impl KeymapRegistry {
             .entry(mode.to_string())
             .or_default()
             .insert(combo, action);
+    }
+
+    /// **Bind a sequence** — `keys` pressed one after another, in `mode`. Binding the same keys
+    /// again replaces what they run, as a single key does. Returns what they ran before.
+    pub fn bind_sequence(
+        &mut self,
+        mode: &str,
+        keys: Vec<KeyCombo>,
+        action: ActionRef,
+    ) -> Option<ActionRef> {
+        let list = self.sequences.entry(mode.to_string()).or_default();
+        match list.iter_mut().find(|(bound, _)| *bound == keys) {
+            Some((_, old)) => Some(std::mem::replace(old, action)),
+            None => {
+                list.push((keys, action));
+                None
+            }
+        }
+    }
+
+    /// Take a sequence out of `mode`.
+    pub fn unbind_sequence(&mut self, mode: &str, keys: &[KeyCombo]) {
+        if let Some(list) = self.sequences.get_mut(mode) {
+            list.retain(|(bound, _)| bound != keys);
+        }
+    }
+
+    /// **Where `keys`, pressed in a row, stand** in `mode` — a sequence they complete, and whether a
+    /// longer one starts with them.
+    pub fn step(&self, mode: &str, keys: &[KeyCombo]) -> SequenceStep {
+        let list = self.sequences.get(mode).map_or(&[][..], Vec::as_slice);
+        SequenceStep {
+            complete: list
+                .iter()
+                .find(|(bound, _)| bound == keys)
+                .map(|(_, action)| action.clone()),
+            continues: list
+                .iter()
+                .any(|(bound, _)| bound.len() > keys.len() && bound.starts_with(keys)),
+        }
     }
 
     /// Remove a binding from a mode. Keyed by the **combo**, so `[keys.unbind]` retires a binding
@@ -305,6 +435,20 @@ impl KeymapRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **A space says "then"; a space beside `+` does not.** `prefix+Shift+s r` is two steps,
+    /// `prefix+ Shift+w` one.
+    #[test]
+    fn a_space_separates_steps_but_not_beside_a_plus() {
+        assert_eq!(written_steps("prefix+Shift+s r"), ["prefix+Shift+s", "r"]);
+        assert_eq!(written_steps(" prefix+ Shift+w "), ["prefix+Shift+w"]);
+        let key = WrittenKey::parse("prefix+Shift+s r");
+        assert!(key.after_leader);
+        assert_eq!(
+            key.keys(),
+            [KeyCombo::parse("Shift+s"), KeyCombo::parse("r")]
+        );
+    }
 
     /// A written key knows which flat layer it binds in, and the leader never reaches the combo.
     #[test]

@@ -21,7 +21,7 @@
 //! # Events say what happened, never what you should do about it
 //!
 //! [`Event::RightClick`], not `ContextMenu`. Naming an event after the response couples the
-//! vocabulary to one reaction: Shift+F10 and the Menu key must be able to *emit* a right-click, and
+//! vocabulary to one reaction: a keyboard binding (heca's `prefix+>`) must be able to *emit* a right-click, and
 //! a widget is free to answer one with something that is not a menu. The same rule is why there is
 //! no `Event::Activate` here — that is a [`WidgetIntent`], resolved from a configurable binding.
 //!

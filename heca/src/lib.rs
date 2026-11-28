@@ -56,8 +56,8 @@ pub use providers::{ChromeCtx, Provider, ProviderCx, ProviderHandles};
 /// Talking to a running heca server from outside it — see [`socket::request`] and [`socket::Attached`].
 pub use server::socket::client as socket;
 
-use app::events::AppEvent;
 use app::events::handle_window_event;
+use app::events::{AppEvent, LoopEvent, WindowKey, WindowProxy};
 pub(crate) use app::focus::switch_workspace_tracked;
 use app::interaction::dispatch_intent;
 use app::lifecycle::handle_about_to_wait;
@@ -83,13 +83,59 @@ pub(crate) fn pane_name(_id: PaneId) -> String {
     String::new()
 }
 
+/// **Which window `state` is**, and what it installed in the library and for notifications — put
+/// back in place whenever its turn comes (see [`HecaApp::activate`]).
+struct WindowSeat {
+    key: WindowKey,
+    library: heca_grid_ui::WindowContext,
+    notifications: Option<crate::notification::NotificationSink>,
+}
+
+impl WindowSeat {
+    /// What the window just built installed.
+    fn capture(key: WindowKey) -> Self {
+        Self {
+            key,
+            library: heca_grid_ui::WindowContext::capture(),
+            notifications: crate::notification::notification_sink(),
+        }
+    }
+    fn enter(&self) {
+        self.library.enter();
+        crate::notification::set_notification_sink(self.notifications.clone());
+    }
+}
+
+/// A window waiting for its turn: its state, and the registry its components' actions joined.
+struct ParkedWindow {
+    seat: WindowSeat,
+    state: Box<AppState>,
+    registry: actions::ActionRegistry,
+}
+
+/// **The program: its windows, and what they share.**
+///
+/// **Several windows, one at a time.** `state` and `registry` are the window being handled now —
+/// every method below works on "the window", as it did when there was only one — and `parked` holds
+/// the others. An event for another window first makes it the one being handled
+/// ([`activate`](Self::activate)), which also puts back what that window installed in the library
+/// (where a frame request, a menu or an action goes). The key map, the config and the base registry
+/// are shared; each window has its own connection to the server, its own view and its own copy of
+/// the registry.
 struct HecaApp {
     launch_mode: crate::app::cli::LaunchMode,
     startup_error: Option<std::io::Error>,
     state: Option<Box<AppState>>,
+    /// Which window `state` is.
+    active: Option<WindowSeat>,
+    /// The other windows.
+    parked: Vec<ParkedWindow>,
     app_config: AppConfig,
-    event_proxy: EventLoopProxy<AppEvent>,
+    event_proxy: EventLoopProxy<LoopEvent>,
     registry: actions::ActionRegistry,
+    /// The built-in registry before any window's components joined it — what a new window starts
+    /// its own copy from.
+    base_registry: actions::ActionRegistry,
     /// Every resolved keymap layer — flat, per mode, per component kind, plus the mode triggers.
     /// One artefact, one lifetime: built from config at load and rebuilt together on reload.
     keymaps: keymap::Keymaps,
@@ -206,7 +252,7 @@ impl HecaApp {
     }
 
     fn new(
-        event_proxy: EventLoopProxy<AppEvent>,
+        event_proxy: EventLoopProxy<LoopEvent>,
         launch_mode: crate::app::cli::LaunchMode,
     ) -> Self {
         let app_config = AppConfig::load();
@@ -223,8 +269,11 @@ impl HecaApp {
             launch_mode,
             startup_error: None,
             state: None,
+            active: None,
+            parked: Vec::new(),
             app_config,
             event_proxy,
+            base_registry: registry.clone(),
             registry,
             keymaps,
             conflicts,
@@ -385,14 +434,183 @@ impl HecaApp {
         Ok(())
     }
 
-    async fn init_state(&mut self, event_loop: &ActiveEventLoop) -> std::io::Result<Box<AppState>> {
-        build_initial_state(
+    /// **Make window `key` the one being handled** — park the current one, put `key`'s state and
+    /// registry in place, and put back what it installed in the library. False when no window has
+    /// that key (it closed).
+    fn activate(&mut self, key: WindowKey) -> bool {
+        if self.active.as_ref().is_some_and(|seat| seat.key == key) {
+            return true;
+        }
+        let Some(at) = self.parked.iter().position(|w| w.seat.key == key) else {
+            return false;
+        };
+        let incoming = self.parked.swap_remove(at);
+        self.park_active();
+        incoming.seat.enter();
+        self.state = Some(incoming.state);
+        self.registry = incoming.registry;
+        self.active = Some(incoming.seat);
+        true
+    }
+
+    /// Put the window being handled with the others, keeping what its last layout left behind.
+    fn park_active(&mut self) {
+        if let (Some(state), Some(mut seat)) = (self.state.take(), self.active.take()) {
+            seat.library.leave();
+            let registry = std::mem::replace(&mut self.registry, self.base_registry.clone());
+            self.parked.push(ParkedWindow {
+                seat,
+                state,
+                registry,
+            });
+        }
+    }
+
+    /// The window a system window id belongs to.
+    fn key_of(&self, id: WindowId) -> Option<WindowKey> {
+        let active = self
+            .state
+            .as_ref()
+            .zip(self.active.as_ref())
+            .filter(|(state, _)| state.window.id() == id)
+            .map(|(_, seat)| seat.key);
+        active.or_else(|| {
+            self.parked
+                .iter()
+                .find(|w| w.state.window.id() == id)
+                .map(|w| w.seat.key)
+        })
+    }
+
+    /// Every open window, the one being handled first.
+    fn window_keys(&self) -> Vec<WindowKey> {
+        self.active
+            .iter()
+            .map(|seat| seat.key)
+            .chain(self.parked.iter().map(|w| w.seat.key))
+            .collect()
+    }
+
+    /// **Open a window** on the server, attached as `launch` says, and make it the one being handled.
+    /// Its components' actions join its own copy of the registry; the first window's collisions are
+    /// the ones reported, because every later window has the same components.
+    fn open_window(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        launch: crate::app::cli::LaunchMode,
+    ) -> std::io::Result<()> {
+        let first = self.state.is_none() && self.parked.is_empty();
+        self.park_active();
+        let key = WindowKey::next();
+        let proxy = WindowProxy::new(self.event_proxy.clone(), key);
+        let mut state = pollster::block_on(build_initial_state(
             &self.app_config,
             event_loop,
-            self.event_proxy.clone(),
-            self.launch_mode.clone(),
-        )
-        .await
+            proxy,
+            launch,
+        ))?;
+        let mut registry = self.base_registry.clone();
+        let mut later = crate::app::conflicts::Conflicts::default();
+        let conflicts = if first {
+            &mut self.conflicts
+        } else {
+            &mut later
+        };
+        // Every mounted component's **declared** actions join the one catalog and registry here
+        // — after the host has its providers, before any input can reach them. This is the host
+        // half of the declaration: a component never mutates app state, so it cannot register
+        // its own.
+        crate::providers::register_provider_actions(&mut state, &mut registry, conflicts);
+        // What another crate added with an extension's `.action(..)`: the same catalog and registry, so
+        // it is reachable from a key, a menu, the palette and RPC like any built-in.
+        crate::entry::register_queued_actions(&mut registry, &mut state.action_catalog, conflicts);
+        state
+            .client
+            .install_actions(registry.clone(), state.action_catalog.clone());
+        // What another crate added with an extension's `.layer(..)`: registered hidden, under its name,
+        // so `toggle_layer` finds it from a key, a menu, the palette and RPC.
+        crate::entry::register_queued_layers(&mut state);
+        // `notify` is a host action, not a component's, but it takes the same
+        // name-keyed door because `WmAction` — a closed enum — cannot express "any plugin can
+        // raise a notification". Registered here, once per window, alongside every other declared
+        // action.
+        let _ =
+            crate::notification::register_notify_action(&mut registry, &mut state.action_catalog);
+        crate::project_trust::register_trust_action(&mut registry, &mut state.action_catalog);
+        let _ = crate::chrome::register_expose_cursor(&mut registry, &mut state.action_catalog);
+        if first {
+            crate::project_trust::notify_if_untrusted_in(state.client.session.folder.as_deref());
+            // What the pane headers are asked to show, now that every action a button names exists:
+            // a name nothing provides, and an added item the user's own list leaves out.
+            crate::chrome::panes::pane_items::report_pane_items(&state);
+        }
+        // Then the keys a plugin registered for them. Core components have theirs from the
+        // config file already; this is the path for anything that has no entry in it.
+        crate::providers::bind_provider_keybindings(
+            &state,
+            &mut self.keymaps.components,
+            &mut self.keymaps.by_action,
+        );
+        // Only now does every layer exist, so this is the first moment a tooltip can be told
+        // the truth about which key runs an action.
+        state.action_shortcuts = crate::chrome::ActionShortcuts::from_index(
+            &self.keymaps.by_action,
+            crate::shortcut::KeyStyle::Compact,
+        );
+        if first {
+            // Everything that can register has now registered — config, built-ins and every
+            // mounted component — so this is the first moment the report can be complete.
+            self.conflicts.report();
+            notify_unread_keys();
+            notify_theme_problems(&self.app_config);
+        }
+        self.active = Some(WindowSeat::capture(key));
+        self.state = Some(state);
+        self.registry = registry;
+        Ok(())
+    }
+
+    /// **Another window on the same server**, on `session` (else the most recent running one). The
+    /// window that asked stays as it is; the new one has its own view from the start.
+    fn open_another_window(&mut self, event_loop: &ActiveEventLoop, session: Option<String>) {
+        // Windows hosts its server inside each window's process, with no socket another window could
+        // reach: a second window there would be a second, separate server.
+        if !cfg!(unix) {
+            if let Some(state) = self.state.as_mut() {
+                state.status_note = Some(
+                    "Another window needs the background server, which this system does not run"
+                        .into(),
+                );
+                state.window.request_redraw();
+            }
+            return;
+        }
+        let launch = session.map_or(crate::app::cli::LaunchMode::Attached, |name| {
+            crate::app::cli::LaunchMode::Session(name)
+        });
+        let back = self.active.as_ref().map(|seat| seat.key);
+        if let Err(error) = self.open_window(event_loop, launch)
+            && let Some(key) = back
+            && self.activate(key)
+            && let Some(state) = self.state.as_mut()
+        {
+            state.status_note = Some(format!("Could not open another window: {error}"));
+            state.window.request_redraw();
+        }
+    }
+
+    /// **Close the window being handled** — its connection goes with it, and its session keeps
+    /// running. The program ends with its last window.
+    fn close_active(&mut self, event_loop: &ActiveEventLoop) {
+        self.state = None;
+        self.active = None;
+        self.registry = self.base_registry.clone();
+        match self.parked.first().map(|w| w.seat.key) {
+            Some(next) => {
+                self.activate(next);
+            }
+            None => event_loop.exit(),
+        }
     }
 }
 
@@ -477,97 +695,60 @@ fn notify_reload_outcome(outcome: Result<(), heca_config::loader::ConfigError>) 
     }
 }
 
-impl ApplicationHandler<AppEvent> for HecaApp {
+impl ApplicationHandler<LoopEvent> for HecaApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.state.is_none() {
+        if self.state.is_none() && self.parked.is_empty() {
             crate::entry::widgets::freeze();
-            let mut state = match pollster::block_on(self.init_state(event_loop)) {
-                Ok(state) => state,
-                Err(error) => {
-                    self.startup_error = Some(error);
-                    event_loop.exit();
-                    return;
-                }
-            };
-            // Every mounted component's **declared** actions join the one catalog and registry here
-            // — after the host has its providers, before any input can reach them. This is the host
-            // half of the declaration: a component never mutates app state, so it cannot register
-            // its own.
-            crate::providers::register_provider_actions(
-                &mut state,
-                &mut self.registry,
-                &mut self.conflicts,
-            );
-            // What another crate added with an extension's `.action(..)`: the same catalog and registry, so
-            // it is reachable from a key, a menu, the palette and RPC like any built-in.
-            crate::entry::register_queued_actions(
-                &mut self.registry,
-                &mut state.action_catalog,
-                &mut self.conflicts,
-            );
-            state
-                .client
-                .install_actions(self.registry.clone(), state.action_catalog.clone());
-            // What another crate added with an extension's `.layer(..)`: registered hidden, under its name,
-            // so `toggle_layer` finds it from a key, a menu, the palette and RPC.
-            crate::entry::register_queued_layers(&mut state);
-            // `notify` is a host action, not a component's, but it takes the same
-            // name-keyed door because `WmAction` — a closed enum — cannot express "any plugin can
-            // raise a notification". Registered here, once, alongside every other declared action.
-            let _ = crate::notification::register_notify_action(
-                &mut self.registry,
-                &mut state.action_catalog,
-            );
-            crate::project_trust::register_trust_action(
-                &mut self.registry,
-                &mut state.action_catalog,
-            );
-            let _ = crate::chrome::register_expose_cursor(
-                &mut self.registry,
-                &mut state.action_catalog,
-            );
-            crate::project_trust::notify_if_untrusted_in(state.client.session.folder.as_deref());
-            // What the pane headers are asked to show, now that every action a button names exists:
-            // a name nothing provides, and an added item the user's own list leaves out.
-            crate::chrome::panes::pane_items::report_pane_items(&state);
-            // Then the keys a plugin registered for them. Core components have theirs from the
-            // config file already; this is the path for anything that has no entry in it.
-            crate::providers::bind_provider_keybindings(
-                &state,
-                &mut self.keymaps.components,
-                &mut self.keymaps.by_action,
-            );
-            // Only now does every layer exist, so this is the first moment a tooltip can be told
-            // the truth about which key runs an action.
-            state.action_shortcuts = crate::chrome::ActionShortcuts::from_index(
-                &self.keymaps.by_action,
-                crate::shortcut::KeyStyle::Compact,
-            );
-            // Everything that can register has now registered — config, built-ins and every
-            // mounted component — so this is the first moment the report can be complete.
-            self.conflicts.report();
-            notify_unread_keys();
-            notify_theme_problems(&self.app_config);
-            self.state = Some(state);
+            if let Err(error) = self.open_window(event_loop, self.launch_mode.clone()) {
+                self.startup_error = Some(error);
+                event_loop.exit();
+            }
         }
     }
 
     fn window_event(
         &mut self,
-        event_loop: &ActiveEventLoop,
-        _window_id: WindowId,
+        _event_loop: &ActiveEventLoop,
+        window_id: WindowId,
         event: WindowEvent,
     ) {
+        let Some(key) = self.key_of(window_id) else {
+            return;
+        };
+        self.activate(key);
         let state = match self.state.as_mut() {
             Some(s) => s,
             None => return,
         };
 
         let _slow = crate::slow_steps::step("client.window_event");
-        handle_window_event(event_loop, &self.registry, &self.keymaps, state, event);
+        handle_window_event(&self.registry, &self.keymaps, state, event);
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        // Every window's turn: its server updates, its reload, its frame.
+        for key in self.window_keys() {
+            if self.activate(key) {
+                self.window_about_to_wait(event_loop);
+            }
+        }
+    }
+
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: LoopEvent) {
+        match event {
+            LoopEvent::NewWindow { session } => self.open_another_window(event_loop, session),
+            LoopEvent::Window { window, event } => {
+                if self.activate(window) {
+                    self.window_event_from_loop(event_loop, event);
+                }
+            }
+        }
+    }
+}
+
+impl HecaApp {
+    /// The end of a turn for the window being handled.
+    fn window_about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let _slow = crate::slow_steps::step("client.about_to_wait");
         self.receive_server();
         // Config reload requested via keybinding — do it before borrowing state.
@@ -599,13 +780,18 @@ impl ApplicationHandler<AppEvent> for HecaApp {
         }
     }
 
-    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
+    /// One of the window being handled's own events.
+    fn window_event_from_loop(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
         self.receive_server();
+        if matches!(event, AppEvent::CloseWindow) {
+            self.close_active(event_loop);
+            return;
+        }
         let Some(state) = self.state.as_mut() else {
             return;
         };
         match event {
-            AppEvent::CloseWindow => event_loop.exit(),
+            AppEvent::CloseWindow => {}
             // **Only a wake.** The turn this event brings round ends in `about_to_wait`, which reads
             // the terminals and mirrors the chrome once and asks for a frame if anything changed —
             // doing it here as well read everything twice per wake. The wake latch is reset as the
@@ -725,7 +911,7 @@ pub fn run(app_name: impl Into<String>) {
     if let Err(error) = crate::agent::launcher::refresh() {
         eprintln!("[heca] could not point the agent launcher at this heca: {error}");
     }
-    let event_loop = EventLoop::<AppEvent>::with_user_event()
+    let event_loop = EventLoop::<LoopEvent>::with_user_event()
         .build()
         .expect("Failed to create event loop");
     event_loop.set_control_flow(ControlFlow::Wait);

@@ -591,8 +591,11 @@ fn notifications_do_not_cross_sessions_even_when_clients_share_one_server() {
     )));
 }
 
+/// **A window whose session is terminated moves on**, to the most recent session still running —
+/// told why first (`SessionLeft`), then attached there. The session itself is kept for an explicit
+/// Restart, and a window on another session hears nothing but the list.
 #[test]
-fn terminating_keeps_clients_and_definition_until_explicit_restart() {
+fn terminating_moves_its_windows_to_the_most_recent_running_session_and_keeps_the_definition() {
     let folder = tempfile::tempdir().unwrap();
     let mut server = a_loop();
     let a = create(&mut server, &folder.path().join("a"), "A");
@@ -604,7 +607,11 @@ fn terminating_keeps_clients_and_definition_until_explicit_restart() {
             name: a.name.clone(),
         })
         .unwrap();
-    other.send(ClientMsg::AttachTo { name: b.name }).unwrap();
+    other
+        .send(ClientMsg::AttachTo {
+            name: b.name.clone(),
+        })
+        .unwrap();
     server.pump(Instant::now());
     drain(&first);
     drain(&other);
@@ -614,33 +621,117 @@ fn terminating_keeps_clients_and_definition_until_explicit_restart() {
         })
         .unwrap();
     server.pump(Instant::now());
+    let told = drain(&first);
     assert!(
-        matches!(first.poll().unwrap(), Some(ServerMsg::SessionTerminated { session })
-        if session.id == a.id && session.status == SessionStatus::Terminated)
+        matches!(told.first(), Some(ServerMsg::SessionLeft { name, deleted: false }) if *name == a.name),
+        "told why first: {told:?}"
+    );
+    assert!(
+        told.iter()
+            .any(|m| matches!(m, ServerMsg::Attached { session, .. } if session.id == b.id)),
+        "then attached to the most recent running session: {told:?}"
+    );
+    assert!(
+        !told
+            .iter()
+            .any(|m| matches!(m, ServerMsg::SessionTerminated { .. })),
+        "never asked what to do: {told:?}"
     );
     assert!(drain(&other).iter().all(|message| matches!(
         message,
         ServerMsg::Sessions {
             result: Ok(SessionReply::List(_)),
             ..
-        }
+        } | ServerMsg::Windows { .. }
     )));
     assert_eq!(server.clients.len(), 2);
     let i = server.named(&a.name).unwrap();
     assert_eq!(server.sessions[i].info().status, SessionStatus::Terminated);
-    drain(&first);
     server
-        .execute_session(SessionCommand::Restart { name: a.name })
+        .execute_session(SessionCommand::Restart {
+            name: a.name.clone(),
+        })
         .unwrap();
+    let i = server.named(&a.name).unwrap();
+    assert_eq!(server.sessions[i].info().status, SessionStatus::Active);
+}
+
+/// **With nothing else running, the window stays and is asked** — the session dialog (Restart,
+/// another, new, exit) is the only honest answer when there is nowhere to go.
+#[test]
+fn terminating_the_only_running_session_keeps_its_window_and_asks() {
+    let folder = tempfile::tempdir().unwrap();
+    let mut server = a_loop();
+    let first_session = server.sessions[0].info().name.clone();
+    let a = create(&mut server, &folder.path().join("a"), "A");
+    server
+        .execute_session(SessionCommand::Terminate {
+            name: first_session,
+        })
+        .unwrap();
+    let window = server.connect();
+    window
+        .send(ClientMsg::AttachTo {
+            name: a.name.clone(),
+        })
+        .unwrap();
+    server.pump(Instant::now());
+    drain(&window);
+    server
+        .execute_session(SessionCommand::Terminate {
+            name: a.name.clone(),
+        })
+        .unwrap();
+    server.pump(Instant::now());
     assert!(
-        matches!(first.poll().unwrap(), Some(ServerMsg::Attached { session, .. })
-        if session.id == a.id && session.status == SessionStatus::Active)
+        matches!(window.poll().unwrap(), Some(ServerMsg::SessionTerminated { session })
+        if session.id == a.id && session.status == SessionStatus::Terminated)
     );
 }
 
+/// **A plain `heca` skips a terminated session** — even the last one used — and goes where a
+/// window whose session closed goes: the most recent session still running.
 #[test]
-fn deleting_removes_the_definition_but_keeps_its_windows_available_without_deleting_project_files()
-{
+fn plain_attach_skips_a_terminated_last_session() {
+    let folder = tempfile::tempdir().unwrap();
+    let mut server = a_loop();
+    let a = create(&mut server, &folder.path().join("a"), "A");
+    let b = create(&mut server, &folder.path().join("b"), "B");
+    for name in [&b.name, &a.name] {
+        let window = server.connect();
+        window
+            .send(ClientMsg::AttachTo { name: name.clone() })
+            .unwrap();
+        server.pump(Instant::now());
+        drain(&window);
+        window.send(ClientMsg::Detach).unwrap();
+        server.pump(Instant::now());
+    }
+    assert_eq!(
+        server.last_session,
+        Some(a.id),
+        "A was used last, and no window is left on it"
+    );
+    server
+        .execute_session(SessionCommand::Terminate {
+            name: a.name.clone(),
+        })
+        .unwrap();
+    let plain = server.connect();
+    plain.send(ClientMsg::Attach).unwrap();
+    server.pump(Instant::now());
+    let got = drain(&plain);
+    assert!(
+        got.iter()
+            .any(|m| matches!(m, ServerMsg::Attached { session, .. } if session.id == b.id)),
+        "the most recent running session, not the terminated last one: {got:?}"
+    );
+}
+
+/// **A deleted session's windows move on the same way**, told it was deleted; the project folder
+/// is never touched.
+#[test]
+fn deleting_moves_its_windows_on_without_deleting_project_files() {
     let folder = tempfile::tempdir().unwrap();
     let mut server = a_loop();
     let project = folder.path().join("a");
@@ -668,36 +759,18 @@ fn deleting_removes_the_definition_but_keeps_its_windows_available_without_delet
         })
         .unwrap();
     server.pump(Instant::now());
-    assert!(matches!(first.poll().unwrap(), Some(ServerMsg::SessionDeleted { id }) if id == a.id));
-    assert_eq!(server.clients.len(), 2);
-    let client_id = server.clients[0].id;
-    let (send, receive) = std::sync::mpsc::channel();
-    server.begin_rpc("command_palette mode=session".into(), send);
-    // Existing attached windows still receive ordinary untargeted RPC first.
+    let told = drain(&first);
     assert!(
-        drain(&other)
-            .iter()
-            .any(|msg| matches!(msg, ServerMsg::Rpc { .. }))
+        matches!(told.first(), Some(ServerMsg::SessionLeft { name, deleted: true }) if *name == a.name),
+        "{told:?}"
     );
-    drop(receive);
-    first.send(ClientMsg::AttachTo { name: b.name }).unwrap();
-    server.pump(Instant::now());
     assert!(
-        drain(&first).iter().any(
-            |msg| matches!(msg, ServerMsg::Attached { client_id: id, .. } if *id == client_id)
-        )
+        told.iter()
+            .any(|m| matches!(m, ServerMsg::Attached { session, .. } if session.id == b.id)),
+        "{told:?}"
     );
     assert!(server.named(&a.name).is_err());
     assert_eq!(server.clients.len(), 2);
-    // `first` joining session b refreshes b's window directory, so the other window there sees a
-    // `Windows` broadcast alongside the session list — both are expected, nothing else.
-    assert!(drain(&other).iter().all(|message| matches!(
-        message,
-        ServerMsg::Sessions {
-            result: Ok(SessionReply::List(_)),
-            ..
-        } | ServerMsg::Windows { .. }
-    )));
     assert_eq!(
         std::fs::read_to_string(project.join("keep.txt")).unwrap(),
         "user data"
@@ -820,4 +893,30 @@ fn native_notifications_from_terminal_setup_stay_in_the_requesting_session() {
             .any(|m| matches!(m, ServerMsg::Notifications(v) if !v.is_empty()))
     );
     assert!(drain(&other).is_empty());
+}
+
+/// **A plain `heca` with nothing running starts a new session** — when every session left is
+/// terminated, it does not land on one and ask for Restart; the terminated ones stay in the list.
+#[test]
+fn plain_attach_with_only_terminated_sessions_starts_a_new_one() {
+    let mut server = a_loop();
+    let only = server.sessions[0].info().name.clone();
+    server
+        .execute_session(SessionCommand::Terminate { name: only.clone() })
+        .unwrap();
+    let plain = server.connect();
+    plain.send(ClientMsg::Attach).unwrap();
+    server.pump(Instant::now());
+    let got = drain(&plain);
+    let attached = got.iter().find_map(|m| match m {
+        ServerMsg::Attached { session, .. } => Some(session.clone()),
+        _ => None,
+    });
+    let attached = attached.expect("attached");
+    assert_eq!(attached.status, SessionStatus::Active, "a running session");
+    assert_ne!(attached.name, only, "a new one, not the terminated one");
+    assert!(
+        server.named(&only).is_ok(),
+        "the terminated one is kept for Restart"
+    );
 }

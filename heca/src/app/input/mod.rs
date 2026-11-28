@@ -15,7 +15,8 @@ mod modes;
 mod pick_modes;
 mod surface;
 
-use modes::{SELECTION_MODE, handle_chord_mode, handle_mode, handle_prefix_mode};
+pub(crate) use modes::alone_after_waiting;
+use modes::{SELECTION_MODE, handle_mode, handle_prefix_mode, handle_sequence_mode};
 use pick_modes::{
     handle_column_pick_mode, handle_dock_pick_mode, handle_hint_pick_mode, handle_pane_select_mode,
     handle_pane_swap_mode, handle_pane_take_mode, handle_workspace_pick_mode,
@@ -194,8 +195,11 @@ pub(crate) fn handle_keyboard_input(
                 ctx,
             );
         }
-        InputMode::Chord { sequence } => {
-            handle_chord_mode(registry, state, &sequence, ctx);
+        InputMode::Sequence { keys, then_alone } => {
+            if handle_sequence_mode(registry, keymap, state, &keys, then_alone, ctx) {
+                // The key did not continue the sequence: it is a key of its own.
+                return handle_keyboard_input(registry, keymaps, state, ctx);
+            }
         }
         InputMode::Mode { name } => {
             handle_mode(
