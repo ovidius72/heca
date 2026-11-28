@@ -108,6 +108,8 @@ pub(super) fn assert_way_out(
             action: way_out.name,
             layer: "built-in (every panel has a way out)",
             key: RESTORED_KEY,
+            args: &std::collections::HashMap::new(),
+            after: "",
         },
         conflicts,
         index,

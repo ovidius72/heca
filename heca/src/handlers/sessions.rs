@@ -6,6 +6,48 @@ use crate::{
     input::WmAction,
 };
 
+/// **`new_window`** — another window on the same server, on the named session or this window's. The
+/// program opens it (a window cannot make one itself); this window stays as it is.
+pub(crate) fn handle_new_window(
+    state: &mut AppState,
+    action: &WmAction,
+) -> crate::actions::ActionResult {
+    let WmAction::NewWindow { session } = action else {
+        return Ok(());
+    };
+    let session = session
+        .clone()
+        .or_else(|| (!state.client.detached).then(|| state.client.session.name.clone()));
+    state.event_proxy.new_window(session);
+    Ok(())
+}
+
+/// **`close_window`** — this window goes; its session and its programs keep running. heca ends
+/// with its last window (macOS: Cmd+W closes a window, Cmd+Q the app).
+pub(crate) fn handle_close_window(
+    state: &mut AppState,
+    _: &WmAction,
+) -> crate::actions::ActionResult {
+    let _ = state
+        .event_proxy
+        .send_event(crate::app::events::AppEvent::CloseWindow);
+    Ok(())
+}
+
+/// **`last_session`** — back to the session this window showed before; again, and it comes back
+/// (tmux's last session). Each window remembers its own.
+pub(crate) fn handle_last_session(
+    state: &mut AppState,
+    _: &WmAction,
+) -> crate::actions::ActionResult {
+    let Some(name) = state.client.last_session_name() else {
+        state.status_note = Some("No other session visited in this window yet".into());
+        return Ok(());
+    };
+    let action = WmAction::SwitchSession { name };
+    handle_switch_session(state, &action)
+}
+
 pub(crate) fn handle_detach_session(
     state: &mut AppState,
     _: &WmAction,
@@ -28,8 +70,24 @@ pub(crate) fn handle_switch_session(
     };
     if let Err(error) = state.client.switch_session(name.clone()) {
         state.status_note = Some(error.to_string());
+    } else {
+        settle_before_leaving(state);
     }
     Ok(())
+}
+
+/// **The window is about to show another session**: what is still dissolving (the palette the
+/// choice came from) goes now, and the switch waits for the frame without it — the last picture
+/// before the change is held on screen while the new session loads, and must not hold a surface
+/// already closed. A covered window draws nothing to wait for.
+fn settle_before_leaving(state: &mut AppState) {
+    state.layers.cut_exits(&mut state.window_root);
+    if !state.window_occluded {
+        // The frame the selection waits for is always drawn: asked for, and marked as needed.
+        state.client.hold_selection_for_a_frame();
+        state.mark_full_redraw();
+        state.window.request_redraw();
+    }
 }
 
 pub(crate) fn handle_follow(
@@ -56,10 +114,20 @@ pub(crate) fn handle_reconnect_session(
     Ok(())
 }
 
+/// **`rename_session`** — the rename dialog, for `session` or this window's: its name to edit, OK
+/// renaming it through `rename_session_to`. The one rename prompt, from a key and from a session
+/// row's menu alike.
 pub(crate) fn handle_rename_session(
     state: &mut AppState,
-    _: &WmAction,
+    action: &WmAction,
 ) -> crate::actions::ActionResult {
+    let WmAction::RenameSession { session } = action else {
+        return Ok(());
+    };
+    let target = session.clone();
+    let current = target
+        .clone()
+        .unwrap_or_else(|| state.client.session.name.clone());
     let words = &state.settings.session_text;
     let spec = ModalSpec {
         title: state
@@ -69,7 +137,7 @@ pub(crate) fn handle_rename_session(
             .into(),
         body: heca_view::build::Input::new()
             .name("name")
-            .value(state.client.session.name.clone())
+            .value(current)
             .into(),
         actions: vec![
             ModalAction::new("ok", &words.accept).disabled_when_empty("name"),
@@ -78,14 +146,14 @@ pub(crate) fn handle_rename_session(
         danger: false,
         dismissible: true,
     };
-    let _ = crate::chrome::open_modal(state, spec, |state, registry, result| {
+    let _ = crate::chrome::open_modal(state, spec, move |state, registry, result| {
         if let ModalResult::Action { id, data } = result
             && id == "ok"
             && let Some(name) = data.get("name").and_then(PropValue::as_text)
         {
             let _ = registry.execute(
                 &WmAction::RenameSessionTo {
-                    session: None,
+                    session: target.clone(),
                     name: name.trim().into(),
                 },
                 state,

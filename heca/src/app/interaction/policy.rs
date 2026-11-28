@@ -211,8 +211,12 @@ pub(crate) fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ListSessions | WmAction::KillServer
         | WmAction::CreateSession { .. } | WmAction::RenameSessionTo { .. }
         | WmAction::TerminateSession { .. } | WmAction::RestartSession { .. }
-        | WmAction::DeleteSession { .. } | WmAction::NewSession | WmAction::RenameSession
+        | WmAction::DeleteSession { .. } | WmAction::NewSession | WmAction::RenameSession { .. }
         | WmAction::SwitchSession { .. } | WmAction::DetachSession | WmAction::ReconnectSession
+        // Another window changes nothing in this one.
+        | WmAction::NewWindow { .. }
+        | WmAction::CloseWindow
+        | WmAction::LastSession
         // Follow only changes what this window looks at; reachable like a session switch.
         | WmAction::Follow { .. } => ActionPolicy::Global,
         // Dismissing/picking a notification touches no layout and no pane — a toast can be up

@@ -92,6 +92,12 @@ fn key_glyph(token: &str) -> Option<NfGlyph> {
 /// The prefix leads as its own cap, and stays **text** (`λ`): it is not a physical key with a
 /// picture, and the UI face has the letter.
 pub(crate) fn chord_caps(binding: &str) -> Vec<KeyCap> {
+    // **A sequence is its steps, in order** — `prefix+r Ctrl+h` (a key inside the resize mode) is
+    // the caps of `prefix+r` then the caps of `Ctrl+h`.
+    let steps = crate::keymap::written_steps(binding);
+    if steps.len() > 1 {
+        return steps.iter().flat_map(|step| chord_caps(step)).collect();
+    }
     let (prefixed, keys) = crate::keymap::split_leader(binding);
     let mut caps = Vec::new();
     if prefixed {
@@ -125,6 +131,15 @@ pub(crate) fn chord_caps(binding: &str) -> Vec<KeyCap> {
 /// format_shortcut_styled("prefix+ArrowLeft", KeyStyle::Compact) // "λ ←"
 /// ```
 pub(crate) fn format_shortcut_styled(written: &str, style: KeyStyle) -> String {
+    // A sequence (a key inside a mode) is its steps, each spelled the same way, in order.
+    let steps = crate::keymap::written_steps(written);
+    if steps.len() > 1 {
+        return steps
+            .iter()
+            .map(|step| format_shortcut_styled(step, style))
+            .collect::<Vec<_>>()
+            .join(" ");
+    }
     let (with_prefix, keys) = crate::keymap::split_leader(written);
     let keys = match style {
         KeyStyle::Plain => keys.to_string(),

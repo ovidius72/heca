@@ -100,6 +100,7 @@ fn session_rows(sessions: &[SessionInfo]) -> Vec<PaletteEntry> {
         sessions,
         &current,
         &heca_config::settings::SessionText::default(),
+        &crate::actions::ActionCatalog::with_builtins(),
     )
 }
 

@@ -12,7 +12,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-type IntentSink = Box<dyn Fn(heca_view::Intent)>;
+pub(crate) type IntentSink = Rc<dyn Fn(heca_view::Intent)>;
 
 /// **What receives the actions dispatched inside a container**, declared on it with
 /// [`on_dispatch`](crate::builders::EventExt::on_dispatch).
@@ -62,7 +62,16 @@ pub fn sending_to<T>(route: impl Fn(heca_view::Intent) + 'static, f: impl FnOnce
 ///
 /// The host decides what a name means and whether it is allowed; nothing here inspects the intent.
 pub fn install_intent_sink(f: impl Fn(heca_view::Intent) + 'static) {
-    INTENT_SINK.with(|c| *c.borrow_mut() = Some(Box::new(f)));
+    INTENT_SINK.with(|c| *c.borrow_mut() = Some(Rc::new(f)));
+}
+
+/// The sink installed now, and putting one back — what a [`WindowContext`](crate::WindowContext)
+/// keeps for its window.
+pub(crate) fn intent_sink() -> Option<IntentSink> {
+    INTENT_SINK.with(|c| c.borrow().clone())
+}
+pub(crate) fn set_intent_sink(sink: Option<IntentSink>) {
+    INTENT_SINK.with(|c| *c.borrow_mut() = sink);
 }
 
 /// **Send an action from inside a widget's callback** — the one way a callback that is handed a

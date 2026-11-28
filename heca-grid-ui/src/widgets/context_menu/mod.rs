@@ -69,7 +69,7 @@
 //! ```
 //!
 //! The declaration exists **because the keyboard needs it**: with the menu only inside a closure,
-//! `prefix+>` / `Shift+F10` has nothing to find. Both roads run the same code — the declaration is
+//! `prefix+>` has nothing to find. Both roads run the same code — the declaration is
 //! implemented in terms of [`ContextMenu::show`].
 //!
 //! # Anchors, and why an author never picks one
@@ -77,7 +77,7 @@
 //! | Trigger | Target | Anchor |
 //! |---|---|---|
 //! | [`Event::RightClick`] | the widget under the pointer | the pointer |
-//! | the host's `open_context_menu` action (`prefix+>`, `Shift+F10`, the Menu key) | the focused widget | declaring component's centre |
+//! | the host's `open_context_menu` action (heca's `prefix+>`, or any key a host binds to it) | the focused widget | declaring component's centre |
 //!
 //! The anchor is read **out of the event**: a pointer event carries a cursor, a keyboard event
 //! carries the target widget's bounds. No event in flight ⇒ no `show` ⇒ nothing to guess. Both

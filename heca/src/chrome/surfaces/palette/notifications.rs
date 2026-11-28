@@ -33,6 +33,7 @@ pub(super) fn entries(records: &[NotificationRecord], now: u64) -> Vec<PaletteEn
             detail: Some(detail_line(record, now)),
             icon: Some(record.view.severity.as_toast_severity().default_glyph()),
             shortcuts: Vec::new(),
+            actions: Vec::new(),
             intent,
         };
         rows.push(row(

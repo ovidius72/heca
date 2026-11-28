@@ -144,6 +144,8 @@ pub(super) fn client(link: impl ClientLink + 'static) -> ClientState {
         session: info(1, "A"),
         sessions: Vec::new(),
         notification_history: None,
+        left: None,
+        previous_session: None,
         backends: BackendStore::new(),
         programs: Rc::new(ProgramsConfig::default()),
         link: Box::new(link),
@@ -160,6 +162,7 @@ pub(super) fn client(link: impl ClientLink + 'static) -> ClientState {
         switching: false,
         detached: false,
         pending_selection: None,
+        hold_selection: None,
         projection_deadline: None,
         wake,
         connection,
@@ -792,4 +795,126 @@ fn a_new_size_is_painted_on_the_next_draw_and_wakes_the_loop_once() {
         client.terminal_view(id, 1.0).unwrap().1,
         TerminalDamage::Full
     );
+}
+
+/// **A window moved off a session that went knows where it came from** — the server's
+/// `SessionLeft` is held until the `Attached` that follows it, so the window can say "A terminated,
+/// now on B" and is never shown the session dialog.
+#[test]
+fn a_window_moved_off_a_closed_session_knows_which_one_and_is_not_asked() {
+    let incoming = Arc::new(Mutex::new(VecDeque::new()));
+    let mut client = client(RecordingLink {
+        sent: Default::default(),
+        incoming: incoming.clone(),
+    });
+    {
+        let mut queue = incoming.lock().unwrap();
+        queue.push_back(ServerMsg::SessionLeft {
+            name: "A".into(),
+            deleted: false,
+        });
+        queue.push_back(ServerMsg::Attached {
+            session: info(2, "B"),
+            client_id: 1,
+            window_ordinal: 1,
+            content: Session::new(SessionId(2), Default::default()).content(),
+        });
+    }
+    let update = client.poll().unwrap();
+    assert!(update.session_attached);
+    assert!(!update.session_terminated, "never asked what to do");
+    assert_eq!(update.left_session, Some(("A".to_string(), false)));
+    assert_eq!(client.session.id, SessionId(2));
+    incoming.lock().unwrap().push_back(ServerMsg::Attached {
+        session: info(3, "C"),
+        client_id: 1,
+        window_ordinal: 1,
+        content: Session::new(SessionId(3), Default::default()).content(),
+    });
+    assert_eq!(
+        client.poll().unwrap().left_session,
+        None,
+        "said once: an ordinary switch afterwards says nothing"
+    );
+}
+
+/// **The title follows a rename** — the session list the server sends after a rename carries the
+/// new name, and the window's title (and what it reports to the server) is formatted again from it.
+#[test]
+fn renaming_the_windows_session_retitles_the_window() {
+    let sent = Arc::new(Mutex::new(Vec::new()));
+    let incoming = Arc::new(Mutex::new(VecDeque::new()));
+    let mut client = client(RecordingLink {
+        sent: sent.clone(),
+        incoming: incoming.clone(),
+    });
+    client.title_fmt = "{session}".into();
+    client.retitle().unwrap();
+    assert_eq!(client.title, "A");
+    let mut renamed = info(1, "work");
+    renamed.status = SessionStatus::Active;
+    incoming.lock().unwrap().push_back(ServerMsg::Sessions {
+        request_id: 0,
+        result: Ok(crate::server::sessions::SessionReply::List(vec![renamed])),
+    });
+    client.poll().unwrap();
+    assert_eq!(client.title, "work");
+    assert!(
+        sent.lock()
+            .unwrap()
+            .iter()
+            .any(|m| matches!(m, ClientMsg::ReportWindowTitle(t) if t == "work")),
+        "the server's window directory hears the new title"
+    );
+}
+
+/// **A session switch waits for the frame without what the choice closed** — the window holds its
+/// last picture while the other session loads, so the selection is sent only once a frame drawn
+/// after the choice is on screen (or, if none comes, when a request would time out).
+#[test]
+fn a_held_switch_is_sent_only_after_a_frame_is_on_screen() {
+    let sent = Arc::new(Mutex::new(Vec::new()));
+    let mut client = client(RecordingLink {
+        sent: sent.clone(),
+        incoming: Default::default(),
+    });
+    let attach_sent = |sent: &Arc<Mutex<Vec<ClientMsg>>>| {
+        sent.lock()
+            .unwrap()
+            .iter()
+            .any(|m| matches!(m, ClientMsg::AttachTo { name } if name == "B"))
+    };
+    client.switch_session("B".into()).unwrap();
+    client.hold_selection_for_a_frame();
+    client.poll().unwrap();
+    assert!(!attach_sent(&sent), "held until a frame is on screen");
+    assert!(
+        client.next_wake().is_some(),
+        "and the window wakes at the latest moment"
+    );
+    client.frame_presented();
+    client.poll().unwrap();
+    assert!(attach_sent(&sent), "sent once the frame is shown");
+}
+
+/// **`last_session` goes back to the session shown before, by id** — a session this window
+/// attached away from is remembered, under its name as it is now (a rename does not lose it), and
+/// switching back makes the other one the last.
+#[test]
+fn the_last_session_is_the_one_shown_before_under_its_current_name() {
+    let incoming = Arc::new(Mutex::new(VecDeque::new()));
+    let mut client = client(RecordingLink {
+        sent: Default::default(),
+        incoming: incoming.clone(),
+    });
+    assert_eq!(client.last_session_name(), None, "nothing visited before");
+    incoming.lock().unwrap().push_back(ServerMsg::Attached {
+        session: info(2, "B"),
+        client_id: 1,
+        window_ordinal: 1,
+        content: Session::new(SessionId(2), Default::default()).content(),
+    });
+    client.poll().unwrap();
+    client.sessions = vec![info(1, "A renamed"), info(2, "B")];
+    assert_eq!(client.last_session_name().as_deref(), Some("A renamed"));
 }

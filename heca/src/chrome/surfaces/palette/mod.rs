@@ -197,6 +197,7 @@ fn standard_palette(
         &state.client.sessions,
         &state.client.session,
         &state.settings.session_text,
+        &state.action_catalog,
     );
     let follow_rows = windows::entries(
         &state.windows,
@@ -249,11 +250,16 @@ fn standard_palette(
         state.settings.pane_renamed_add_process_name,
     );
     let command = |row: &PaletteEntry, list: &str| {
-        let command = row_command(
+        let command = with_row_actions(
+            row_command(
+                row,
+                label_of(row),
+                group_of(row, &owners),
+                id.submitter(row.id.clone(), emit),
+            ),
             row,
-            label_of(row),
-            group_of(row, &owners),
-            id.submitter(row.id.clone(), emit),
+            emit,
+            id.closer(emit),
         );
         let item = lists::PaletteItem::of_entry(row.clone(), sessions.get(&row.id).cloned());
         let rendered = lists::rendered(list, item, realize.clone());
@@ -357,6 +363,38 @@ fn row_command(
         command = command.keys(crate::shortcut::chord_caps(chord));
     }
     command
+}
+
+/// **A row's own actions, as its menu** — the ⋯, the right-click and `prefix+>` on the row (the
+/// palette draws and opens it; see `Command::context_menu`). Choosing an entry closes the palette,
+/// as choosing the row does — what it opens (a rename dialog, a confirmation) comes up over the
+/// window, not over a list that no longer says the truth — then fires its intent through the
+/// window's one dispatch door, so a Delete here is confirmed like `delete_session` from a key or
+/// RPC. A row with none is left as it is.
+fn with_row_actions(
+    command: Command,
+    row: &PaletteEntry,
+    emit: &ChromeIntentEmitter,
+    close: impl Fn() + Clone + 'static,
+) -> Command {
+    use heca_grid_ui::widgets::{ContextMenu, Menu, MenuItem};
+    if row.actions.is_empty() {
+        return command;
+    }
+    let mut menu = Menu::new(row.label.clone(), String::new());
+    for action in &row.actions {
+        let (emit, intent, close) = (emit.clone(), action.intent.clone(), close.clone());
+        menu = menu.child(
+            MenuItem::new()
+                .label(action.label.clone())
+                .danger(action.danger)
+                .on_click(move || {
+                    close();
+                    emit.fire(intent.clone());
+                }),
+        );
+    }
+    command.context_menu(ContextMenu::new(row.id.clone()).child(menu))
 }
 
 /// What a palette runs when a mode with an `on_enter` action is entered: fire that action.

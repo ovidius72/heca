@@ -15,9 +15,8 @@ pub(super) const fn panel_metrics(size: WidgetSize) -> (f64, usize) {
     }
 }
 
-/// **How wide a row's shortcuts may grow, in `em`**, before they wrap onto another line — about
-/// a dozen one-key shortcuts, so a row bound to many keys stays a line or two tall and the title
-/// keeps its room.
+/// **How wide a row's shortcuts may grow, in `em`** — a long chord on its line gives way before the
+/// title loses its room.
 pub(super) const SHORTCUTS_MAX_EM: f32 = 20.0;
 
 /// **How long the panel takes to dissolve in and out** — quick, so it is there as you type.

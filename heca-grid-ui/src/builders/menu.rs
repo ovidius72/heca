@@ -27,7 +27,7 @@ pub trait MenuExt: Component + Sized {
     /// ```
     ///
     /// Nothing else is needed: no row identity, no path string, no registered builder, no
-    /// host-side hit test, no `Shift+F10` handling, and no anchor — the framework picks that from
+    /// host-side hit test, no keyboard-menu-key handling, and no anchor — the framework picks that from
     /// what triggered the menu. Universal, like `key`, so an `Icon` and a plugin's own widget
     /// carry one on the same terms as a `Row`. See [`crate::menu`] for bubbling and the host sink.
     ///

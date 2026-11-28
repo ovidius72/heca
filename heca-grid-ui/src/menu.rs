@@ -14,7 +14,7 @@
 //! ```
 //!
 //! That is the whole of it: no row identity to declare, no path string, no menu id, no registry of
-//! builders, no host hit-test, no `Shift+F10` handling. **Any** widget can carry one — an `Icon`, a
+//! builders, no host hit-test, no keyboard-menu-key handling. **Any** widget can carry one — an `Icon`, a
 //! `Label`, a plugin's own type — because the declaration lives on [`Base`](crate::component::Base)
 //! like every other universal slot.
 //!
@@ -49,7 +49,7 @@
 //! | Trigger | Target | Anchor |
 //! |---|---|---|
 //! | [`Event::RightClick`](crate::event::Event::RightClick) | the widget under the pointer | the pointer |
-//! | the host's `open_context_menu` action (`Shift+F10`, the Menu key, a binding) | the focused widget | the widget's bounds |
+//! | the host's `open_context_menu` action (heca's `prefix+>`, or any key a host binds to it) | the focused widget | the widget's bounds |
 //!
 //! Both **bubble to the nearest ancestor that declares a menu**: you right-click the `Label` inside
 //! a row, not the row; focus sits on a cell, and the menu belongs to the row. Bubbling stops at the
@@ -70,7 +70,7 @@ use heca_core::layout::{Point, Rectangle};
 use std::cell::RefCell;
 
 /// The host's presenter: given a built, anchored menu, put it on screen.
-type MenuSink = Box<dyn Fn(ContextMenu, MenuAnchor, Option<String>)>;
+pub(crate) type MenuSink = std::rc::Rc<dyn Fn(ContextMenu, MenuAnchor, Option<String>)>;
 
 thread_local! {
     /// Host-installed sink every [`ContextMenu::show_at`] posts to. Thread-local because the UI
@@ -90,7 +90,16 @@ thread_local! {
 /// });
 /// ```
 pub fn install_menu_sink(f: impl Fn(ContextMenu, MenuAnchor, Option<String>) + 'static) {
-    MENU_SINK.with(|c| *c.borrow_mut() = Some(Box::new(f)));
+    MENU_SINK.with(|c| *c.borrow_mut() = Some(std::rc::Rc::new(f)));
+}
+
+/// The sink installed now, and putting one back — what a [`WindowContext`](crate::WindowContext)
+/// keeps for its window.
+pub(crate) fn menu_sink() -> Option<MenuSink> {
+    MENU_SINK.with(|c| c.borrow().clone())
+}
+pub(crate) fn set_menu_sink(sink: Option<MenuSink>) {
+    MENU_SINK.with(|c| *c.borrow_mut() = sink);
 }
 
 /// **Show a menu at an anchor you chose yourself** — the low road, for a host or a trigger with no
@@ -181,7 +190,30 @@ pub fn keyboard_anchor(root: &dyn Component, cursor: Option<&str>) -> Option<Men
 fn keyboard_path(root: &dyn Component, cursor: Option<&str>) -> Option<Vec<usize>> {
     cursor
         .and_then(|key| crate::nav::path_with_key(root, key))
-        .or_else(|| focused_path(root))
+        .or_else(|| focused_path(root).map(|path| active_item(root, path)))
+}
+
+/// **The item the focused widget says the keyboard acts on**, when it or one of its ancestors
+/// names one ([`Base::active_descendant`](crate::component::Base::active_descendant)) — else the
+/// focused widget itself. Nearest declaration wins, as for the menu.
+fn active_item(root: &dyn Component, focused: Vec<usize>) -> Vec<usize> {
+    let mut chain = vec![root];
+    let mut node = root;
+    for i in &focused {
+        let Some(child) = node.base().children.get(*i) else {
+            break;
+        };
+        node = child.as_ref();
+        chain.push(node);
+    }
+    for node in chain.iter().rev() {
+        if let Some(item) = &node.base().active_descendant {
+            return item()
+                .and_then(|id| path_with_identity(root, id))
+                .unwrap_or(focused);
+        }
+    }
+    focused
 }
 
 /// Build the menu declared by the innermost widget at or above `path`.
@@ -215,6 +247,25 @@ fn menu_owner<'a>(root: &'a dyn Component, path: &[usize]) -> Option<&'a dyn Com
         }
     }
     best
+}
+
+/// The path to the widget whose identity ([`focus_id`](crate::component::Base::focus_id)) is `id`.
+fn path_with_identity(root: &dyn Component, id: u64) -> Option<Vec<usize>> {
+    fn walk(node: &dyn Component, id: u64, at: &mut Vec<usize>) -> bool {
+        if node.base().focus_id() == id {
+            return true;
+        }
+        for (i, child) in node.base().children.iter().enumerate() {
+            at.push(i);
+            if walk(child.as_ref(), id, at) {
+                return true;
+            }
+            at.pop();
+        }
+        false
+    }
+    let mut path = Vec::new();
+    walk(root, id, &mut path).then_some(path)
 }
 
 /// The path to the focused widget, if one holds the keyboard.

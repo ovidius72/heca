@@ -1800,6 +1800,10 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 - Do not match raw feature keys like `h/j/k/l`, arrows, `y`, `p`, etc. inside mode handlers unless they are resolved through the mode keymap and action system.
 - Important app-wide rule: design actions so they are reachable through mouse/UI, keyboard/action dispatch, and RPC whenever that capability makes sense on those surfaces.
 - Default keybindings live in `keybindings.default.toml` (embedded single source): add new bindings here.
+- **Every action without required arguments ships with a key** — a direct one or a **key sequence**
+  after the prefix (`"prefix+Ctrl+s r"`: a space means "then"). Group related actions under one
+  leading key (sessions `prefix+Ctrl+s …`) instead of hunting for free single keys. Sequences wait
+  `prefix_timeout_ms` for the next key, as neovim's `timeoutlen`; see `docs/keybindings.md`.
 
 ### Adding New Actions
 

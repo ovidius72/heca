@@ -43,7 +43,7 @@ pub struct Dropped {
     pub modifiers: Modifiers,
 }
 
-type DropSink = Box<dyn Fn(Dropped)>;
+pub(crate) type DropSink = std::rc::Rc<dyn Fn(Dropped)>;
 
 thread_local! {
     /// Host-installed sink every unclaimed drop posts to. Thread-local because the UI runs
@@ -63,7 +63,16 @@ thread_local! {
 /// The host will usually queue it and act in its own frame, because acting needs the mutable app
 /// state a sink does not have — the same shape the menu sink uses.
 pub fn install_drop_sink(f: impl Fn(Dropped) + 'static) {
-    DROP_SINK.with(|c| *c.borrow_mut() = Some(Box::new(f)));
+    DROP_SINK.with(|c| *c.borrow_mut() = Some(std::rc::Rc::new(f)));
+}
+
+/// The sink installed now, and putting one back — what a [`WindowContext`](crate::WindowContext)
+/// keeps for its window.
+pub(crate) fn drop_sink() -> Option<DropSink> {
+    DROP_SINK.with(|c| c.borrow().clone())
+}
+pub(crate) fn set_drop_sink(sink: Option<DropSink>) {
+    DROP_SINK.with(|c| *c.borrow_mut() = sink);
 }
 
 /// Hand a drop to the host. A no-op until a sink is installed, so widget code and headless tests

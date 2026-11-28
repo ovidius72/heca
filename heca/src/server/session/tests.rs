@@ -611,3 +611,36 @@ fn the_session_a_window_is_sent_carries_the_key_actions_use() {
         serde_json::from_str(&serde_json::to_string(&runtime.info()).unwrap()).unwrap();
     assert_eq!(sent.key, Some(runtime.service_ref().key));
 }
+
+/// **A window takes the lowest number no window on the session holds now** — alone it is the first,
+/// a second is #2, a number a window left goes to the next one, and nobody's number moves when
+/// another leaves.
+#[test]
+fn a_window_takes_the_lowest_free_number_and_keeps_it() {
+    use crate::server::wire::in_process;
+    let mut runtime = SessionRuntime::new(
+        ServerState::for_tests(Default::default()),
+        Session::new(SessionId(42), Default::default()),
+    );
+    let join = |runtime: &mut SessionRuntime, id: u64| {
+        let (_client, server) = in_process();
+        let connection = Rc::new(Connection::new(id, Box::new(server)));
+        runtime.add_connection(connection.clone());
+        connection
+    };
+    let one = join(&mut runtime, 1);
+    let two = join(&mut runtime, 2);
+    let three = join(&mut runtime, 3);
+    assert_eq!(
+        [
+            one.window_ordinal.get(),
+            two.window_ordinal.get(),
+            three.window_ordinal.get()
+        ],
+        [1, 2, 3]
+    );
+    runtime.detach_connection(2);
+    assert_eq!(three.window_ordinal.get(), 3, "nobody else's number moves");
+    let four = join(&mut runtime, 4);
+    assert_eq!(four.window_ordinal.get(), 2, "the number left free");
+}

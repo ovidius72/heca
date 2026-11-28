@@ -231,6 +231,38 @@ move_workspace_down = "prefix+Ctrl+Shift+n"
 # ── System ──
 command_palette = "prefix+p"        # Open command palette (actions)
 reload_config   = "prefix+Shift+r"  # Reload config at runtime
+new_window      = ["prefix+Ctrl+w", "prefix+Ctrl+s w"]  # Another window on the same server, with its own view
+
+# ── Key sequences ──
+# A space means "then": `prefix+Ctrl+s r` is the prefix, Ctrl+s, then r. After a key that begins a
+# sequence heca waits `prefix_timeout_ms` for the next one (as neovim waits `timeoutlen`); a key that
+# does not continue it, or the wait running out, does what the first key does alone.
+
+# Sessions — prefix, Ctrl+s, then:
+new_session       = "prefix+Ctrl+s n"        # new session (asks for a folder)
+rename_session    = "prefix+Ctrl+s r"        # rename this session
+detach_session    = "prefix+Ctrl+s d"        # leave this session running, choose another
+terminate_session = "prefix+Ctrl+s t"        # stop its programs, keep it for Restart
+delete_session    = "prefix+Ctrl+s x"        # remove it (never the project files)
+reconnect_session = "prefix+Ctrl+s c"        # start a missing server and reconnect
+kill_server       = "prefix+Ctrl+s Shift+k"  # stop the server and every session
+list_sessions     = "prefix+Ctrl+s l"        # the session list (also prefix+#)
+last_session      = "prefix+Ctrl+s Tab"      # back to the session shown before, and again
+# Close this window only; its session keeps running (macOS: Cmd+W a window, Cmd+Q the app).
+close_window      = "Super+w"
+
+# The sidebar tree, folded like vim's folds — prefix, Shift+z, then:
+collapse_current_column    = "prefix+Shift+z c"        # close this column
+expand_current_column      = "prefix+Shift+z o"        # open this column
+collapse_current_workspace = "prefix+Shift+z Shift+c"  # close this workspace
+expand_current_workspace   = "prefix+Shift+z Shift+o"  # open this workspace
+
+# Names back to the program's — prefix, Shift+u, then:
+reset_pane_name      = "prefix+Shift+u p"
+reset_workspace_name = "prefix+Shift+u w"
+
+# heca on the command line — prefix, Shift+a, then:
+install_command = "prefix+Shift+a i"
 
 # ── Notifications ──
 # `notification_dismiss_one` has no default binding — it needs an id, and a keypress cannot
@@ -253,7 +285,7 @@ notification_history       = "prefix+Ctrl+Alt+n" # List the notifications still 
 
 # ── Selection (host capability, reusable across pane types) ──
 enter_selection_mode = "prefix+s"        # Enter selection mode (caret-only)
-clear_selection      = "prefix+Shift+s"  # Clear selection; exit selection mode
+clear_selection      = "prefix+Shift+q"  # Clear selection; exit selection mode
 copy_selection       = "prefix+y"        # Copy selection to clipboard
 # Paste: Super+V (macOS Cmd+V), Ctrl+Shift+V (Linux/Windows), plus a prefix combo.
 paste_clipboard      = ["Super+v", "Ctrl+Shift+v", "prefix+Shift+p"]
@@ -297,22 +329,16 @@ keys   = "prefix+Ctrl+o"
 action = "command_palette"
 args   = { mode = "workspace" }
 
+# The session list is its own action, `list_sessions` — the palette's "Sessions" row, RPC
+# `heca rpc list_sessions` (JSON) and this key are one thing; in a window it opens the palette on
+# the `#` list.
 [[keys.bind]]
 keys   = "prefix+#"
-action = "command_palette"
-args   = { mode = "session" }
+action = "list_sessions"
 
-# The context menu of whatever the keyboard is on — the focused widget (a sidebar row, a
-# plugin's row), else the focused pane. `prefix+>` above is the heca-shaped binding; these two are
-# the platform conventions, on the SAME action, so rebinding or unbinding it moves all of them.
-# Global (no `prefix+`), because that is how every other app spells them.
-[[keys.bind]]
-keys   = "Shift+F10"
-action = "open_context_menu"
-
-[[keys.bind]]
-keys   = "ContextMenu"          # the dedicated Menu key, where a keyboard has one
-action = "open_context_menu"
+# The context menu of whatever the keyboard is on is `prefix+>` above. Deliberately no global
+# `Shift+F10` or Menu key: heca holds other programs, and a key bound without the prefix never
+# reaches the program in the focused pane. Bind one yourself with `[[keys.bind]]` if you want it.
 
 # The exposé — a bird's-eye view of every workspace, its columns and its panes
 #. niri binds its equivalent to `toggle-overview`; this is the same idea.

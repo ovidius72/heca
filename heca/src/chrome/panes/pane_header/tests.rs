@@ -536,3 +536,56 @@ fn the_header_band_is_the_painting_themes_bar_colour() {
         "the band is the painting theme's derived bar colour"
     );
 }
+
+/// **A row wears the key of the action as it calls it, with its arguments.** With the shipped
+/// keys, the palette's "Command Palette" row (`command_palette`, no arguments) shows `prefix+p`
+/// only — `prefix+o`, `prefix+Ctrl+o` call it with a `mode` and open other lists — and the
+/// "Sessions" row (`list_sessions`) shows `prefix+#`. Before, every `command_palette` key landed
+/// on one row and the session key on none.
+#[test]
+fn a_row_shows_the_keys_of_its_action_called_its_way() {
+    let config = heca_config::theme::Config::default();
+    let keymaps = crate::app::registry::build_keymaps(
+        &config,
+        &mut crate::app::conflicts::Conflicts::default(),
+    );
+    let shortcuts =
+        ActionShortcuts::from_index(&keymaps.by_action, crate::shortcut::KeyStyle::default());
+    assert_eq!(shortcuts.chords("command_palette"), ["prefix+p"]);
+    assert!(
+        shortcuts
+            .chords("list_sessions")
+            .iter()
+            .any(|k| k == "prefix+#"),
+        "{:?}",
+        shortcuts.chords("list_sessions")
+    );
+    let pane_list = crate::keymap::BindingArgs::from([("mode".to_string(), "pane".to_string())]);
+    assert_eq!(
+        shortcuts.chords_with("command_palette", &pane_list),
+        ["prefix+o"]
+    );
+}
+
+/// **A key inside a mode is shown with the key that opens the mode** — focus-left answers to
+/// `Ctrl+h` only inside the resize mode, so the palette shows `λ r ^h`, never a bare `^h` that would
+/// read as a key that works anywhere.
+#[test]
+fn a_key_inside_a_mode_is_shown_after_the_key_that_opens_it() {
+    let config = heca_config::theme::Config::default();
+    let keymaps = crate::app::registry::build_keymaps(
+        &config,
+        &mut crate::app::conflicts::Conflicts::default(),
+    );
+    let shortcuts =
+        ActionShortcuts::from_index(&keymaps.by_action, crate::shortcut::KeyStyle::default());
+    let keys = shortcuts.chords("focus_left");
+    assert!(keys.iter().any(|k| k == "prefix+h"), "{keys:?}");
+    assert!(keys.iter().any(|k| k == "prefix+r Ctrl+h"), "{keys:?}");
+    assert!(!keys.iter().any(|k| k == "Ctrl+h"), "never bare: {keys:?}");
+    assert_eq!(
+        keys.first().map(String::as_str),
+        Some("prefix+h"),
+        "direct keys first: {keys:?}"
+    );
+}

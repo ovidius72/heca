@@ -101,7 +101,11 @@ pub(crate) fn index_widget_keys(
     index: &mut crate::keymap::BindingIndex,
 ) {
     for (name, _, key) in widget_bindings(config) {
-        crate::keymap::index_binding(index, name, WIDGET_LAYER, &key);
+        crate::keymap::index_binding(
+            index,
+            name,
+            crate::keymap::BoundKey::new(WIDGET_LAYER, &key),
+        );
     }
 }
 

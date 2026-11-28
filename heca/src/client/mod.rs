@@ -63,6 +63,7 @@ fn format_window_title(
         .unwrap_or_else(|| session.name.clone());
     crate::server::sessions::window_title(
         crate::entry::app_name::get(),
+        &session.name,
         &folder,
         ordinal,
         base,
@@ -76,6 +77,9 @@ pub(crate) struct Update {
     pub(crate) session_terminated: bool,
     pub(crate) session_deleted: bool,
     pub(crate) session_detached: bool,
+    /// The window was moved here because its session went: the session's name and whether it was
+    /// deleted. The window says so; it asks nothing.
+    pub(crate) left_session: Option<(String, bool)>,
     pub(crate) content: Option<SessionContent>,
     /// The notifications on show, when the server sent a fresh projection this poll. The window
     /// builds its own toasts from it; `None` means the set did not change.
@@ -125,6 +129,13 @@ pub struct ClientState {
     /// built (`Option::take`), so it is shown once and never kept: the next time the notifications
     /// mode is entered it is asked for again.
     pub(crate) notification_history: Option<Vec<crate::notification::NotificationRecord>>,
+    /// **The session this window was just moved off, and whether it was deleted** — held from the
+    /// server's `SessionLeft` until the `Attached` that follows it, which hands it to the window
+    /// ([`Update::left_session`]) to say where it went.
+    left: Option<(String, bool)>,
+    /// **The session this window showed before the current one** — what `last_session` goes back
+    /// to. By id, so a rename does not lose it.
+    previous_session: Option<heca_core::layout::SessionId>,
     /// Client-side terminal views only, never emulators or process handles.
     pub backends: BackendStore,
     pub programs: Rc<ProgramsConfig>,
@@ -142,12 +153,43 @@ pub struct ClientState {
     pub(crate) detached: bool,
     switching: bool,
     pending_selection: Option<ClientMsg>,
+    /// The selection waits for a frame until this moment at most — see
+    /// `hold_selection_for_a_frame`.
+    hold_selection: Option<Instant>,
     projection_deadline: Option<Instant>,
     wake: ServerWaker,
     connection: heca_config::settings::ConnectionConfig,
 }
 
 impl ClientState {
+    /// **The window's title, from its session as it is now** — formatted again whenever the session
+    /// it shows changes (attached, renamed, moved), and reported to the server only when it changed,
+    /// so the window directory and the follow picker read the same words as the title bar.
+    /// **The name, now, of the session this window showed before** — `None` when there is none, or
+    /// it is gone.
+    pub(crate) fn last_session_name(&self) -> Option<String> {
+        let id = self.previous_session?;
+        self.sessions
+            .iter()
+            .find(|s| s.id == id)
+            .map(|s| s.name.clone())
+    }
+
+    fn retitle(&mut self) -> io::Result<()> {
+        let title = format_window_title(
+            &self.session,
+            self.window_ordinal,
+            &self.title_fmt,
+            &self.title_fmt_numbered,
+        );
+        if title != self.title {
+            self.title = title;
+            self.link
+                .send(ClientMsg::ReportWindowTitle(self.title.clone()))?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn connect(
         config: &AppConfig,
         wake: ServerWaker,
@@ -273,6 +315,8 @@ impl ClientState {
                 session,
                 sessions: Vec::new(),
                 notification_history: None,
+                left: None,
+                previous_session: None,
                 backends: BackendStore::new(),
                 programs: Rc::new(config.config.programs.clone()),
                 link,
@@ -289,6 +333,7 @@ impl ClientState {
                 detached: false,
                 switching: false,
                 pending_selection: None,
+                hold_selection: None,
                 projection_deadline: Some(
                     Instant::now()
                         + std::time::Duration::from_millis(
@@ -422,7 +467,12 @@ impl ClientState {
                 self.link.send(message)?;
             }
         }
-        if let Some(selection) = self.pending_selection.take() {
+        if self
+            .hold_selection
+            .is_none_or(|until| Instant::now() >= until)
+            && let Some(selection) = self.pending_selection.take()
+        {
+            self.hold_selection = None;
             self.link.send(selection)?;
         }
         if let Some(server) = &mut self.local {
@@ -445,21 +495,15 @@ impl ClientState {
                     self.detached = false;
                     if session.id != self.session.id {
                         self.notification_history = None;
+                        self.previous_session = Some(self.session.id);
                     }
                     self.session = session;
                     self.client_id = client_id;
                     self.window_ordinal = window_ordinal;
-                    // Reformat the title for the (possibly new) session and ordinal and report it.
-                    self.title = format_window_title(
-                        &self.session,
-                        self.window_ordinal,
-                        &self.title_fmt,
-                        &self.title_fmt_numbered,
-                    );
-                    self.link
-                        .send(ClientMsg::ReportWindowTitle(self.title.clone()))?;
+                    self.retitle()?;
                     update.content = Some(content);
                     update.session_attached = true;
+                    update.left_session = self.left.take();
                 }
                 ServerMsg::Content { content } => update.content = Some(content),
                 ServerMsg::Windows {
@@ -495,6 +539,7 @@ impl ClientState {
                             .find(|session| session.id == self.session.id)
                         {
                             self.session = current.clone();
+                            self.retitle()?;
                         }
                         self.sessions = sessions;
                     }
@@ -506,6 +551,7 @@ impl ClientState {
                         }
                         if session.id == self.session.id {
                             self.session = session;
+                            self.retitle()?;
                         }
                     }
                     Ok(crate::server::sessions::SessionReply::Deleted(_)) => {}
@@ -521,6 +567,7 @@ impl ClientState {
                     self.pending.clear();
                     update.session_terminated = true;
                 }
+                ServerMsg::SessionLeft { name, deleted } => self.left = Some((name, deleted)),
                 ServerMsg::SessionDeleted { id } | ServerMsg::SessionDetached { id } => {
                     if id == self.session.id {
                         let deleted = matches!(message, ServerMsg::SessionDeleted { .. });
@@ -674,6 +721,8 @@ impl ClientState {
             .and_then(local::LocalServer::next_wake)
             .into_iter()
             .chain(self.projection_deadline.filter(|_| !self.failed))
+            // A selection held for a frame goes at this moment at the latest.
+            .chain(self.hold_selection)
             .min()
     }
 

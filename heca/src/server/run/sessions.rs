@@ -51,6 +51,12 @@ impl ServerLoop {
             SessionCommand::Terminate { name } => {
                 let i = self.named(&name)?;
                 if self.sessions[i].info().status == SessionStatus::Active {
+                    // Its windows go to the most recent running session first, so the terminate
+                    // below tells nobody left on it — only when nothing else runs do they stay
+                    // and get the session dialog.
+                    let id = self.sessions[i].info().id;
+                    self.move_windows_off(id, false);
+                    let i = self.named(&name)?;
                     self.sessions[i].terminate();
                     self.announce_session(
                         SessionChange::Terminated,
@@ -73,6 +79,9 @@ impl ServerLoop {
             SessionCommand::Delete { name } => {
                 let i = self.named(&name)?;
                 let id = self.sessions[i].info().id;
+                // Its windows move on first; the loop below finds them only when nothing else runs.
+                self.move_windows_off(id, true);
+                let i = self.named(&name)?;
                 let gone = self.sessions[i].service_entry();
                 for client in &self.clients {
                     if client.session.get() == Some(id) {

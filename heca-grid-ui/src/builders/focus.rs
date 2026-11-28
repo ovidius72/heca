@@ -25,6 +25,21 @@ pub trait FocusExt: Component + Sized {
         self.base_mut().follow_focus_modal(source);
         self
     }
+
+    /// **While this widget holds the keyboard, the keyboard acts on another item** — the widget
+    /// `item` names now, as the DOM's `aria-activedescendant`. A search field that keeps the focus
+    /// while the arrows move a selection through a list beside it hands it the list's selected row,
+    /// and the keyboard's menu action (heca's `prefix+>`) opens that row's menu. No `key` is needed:
+    /// the list names its row by the row's own identity.
+    ///
+    /// ```ignore
+    /// let list = List::new(items);
+    /// Input::new().value(query).active_descendant(list.selected_item())
+    /// ```
+    fn active_descendant(mut self, item: impl Fn() -> Option<u64> + 'static) -> Self {
+        self.base_mut().active_descendant = Some(std::rc::Rc::new(item));
+        self
+    }
 }
 
 impl<T: Component + Sized> FocusExt for T {}

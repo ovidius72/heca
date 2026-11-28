@@ -20,8 +20,8 @@ pub struct Command {
     pub(super) description_path: bool,
     pub(super) detail: Option<String>,
     pub(super) icon: Option<Glyph>,
-    /// One entry per **binding**, each a chord of caps (`[λ] [⇧] [e]`). Several bindings sit side by
-    /// side and wrap when they do not fit — an action bound twice really is bound twice.
+    /// One entry per **binding**, each a chord of caps (`[λ] [⇧] [e]`), each on its own line — an
+    /// action bound twice really is bound twice, and reads as two.
     pub(super) chords: Vec<Vec<KeyCap>>,
     /// Is this the row the user is already on? Drawn in the accent so it can be found at a glance.
     /// Distinct from the *selection*, which is where the keyboard is right now.
@@ -37,6 +37,8 @@ pub struct Command {
     pub(super) trailing: Option<std::rc::Rc<dyn Fn() -> crate::WidgetModel>>,
     /// What the row shows instead of the palette's own (icon, title, description, keys), when set.
     pub(super) content: Option<std::rc::Rc<dyn Fn() -> crate::WidgetModel>>,
+    /// What else can be done with this row — see [`context_menu`](Self::context_menu).
+    pub(super) menu: Option<crate::widgets::ContextMenu>,
     pub(super) on_run: Box<dyn Fn()>,
 }
 
@@ -67,6 +69,7 @@ impl Command {
             mode: None,
             trailing: None,
             content: None,
+            menu: None,
             on_run: Box::new(on_run),
         }
     }
@@ -214,6 +217,27 @@ impl Command {
         self
     }
 
+    /// **What else can be done with this row** — a session row's Rename, Terminate, Delete. The
+    /// row gets a ⋯ button at its end while it is selected, and the menu opens from it, from a
+    /// right-click on the row, and from the keyboard's menu action (heca's `prefix+>`) while the
+    /// row is the selected one. A menu of **one** entry is not opened: the ⋯ runs that entry and
+    /// its tooltip names it. Choosing the row itself still runs the command.
+    ///
+    /// ```ignore
+    /// Command::new("work", switch).context_menu(
+    ///     ContextMenu::new("session").child(
+    ///         Menu::new("work", "")
+    ///             .child(MenuItem::new().label("Rename").on_click(rename))
+    ///             .child(MenuItem::new().label("Delete").danger(true).on_click(delete)),
+    ///     ),
+    /// )
+    /// ```
+    #[heca_grid_ui_macros::host_only("a menu holds functions, which cannot cross as a property")]
+    pub fn context_menu(mut self, menu: crate::widgets::ContextMenu) -> Self {
+        self.menu = Some(menu);
+        self
+    }
+
     /// An optional leading icon.
     #[heca_grid_ui_macros::prop]
     pub fn icon(mut self, glyph: Glyph) -> Self {
@@ -224,8 +248,8 @@ impl Command {
     /// Add one **binding**, as the caps of its chord — `[Text("λ"), Nf(Shift), Text("e")]` draws
     /// `[λ] [⇧] [e]` at the right edge of the row.
     ///
-    /// Call it once per binding: the bindings sit side by side, a chord's caps kept together, and
-    /// wrap onto another line only when they do not fit.
+    /// Call it once per binding: each binding takes its own line, right-aligned, a chord's caps kept
+    /// together — so two bindings never read as one long chord.
     #[heca_grid_ui_macros::host_only("a composed value, not a scalar")]
     pub fn keys(mut self, chord: impl IntoIterator<Item = KeyCap>) -> Self {
         let chord: Vec<KeyCap> = chord.into_iter().collect();

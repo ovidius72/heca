@@ -28,6 +28,26 @@ impl ClientState {
         Ok(())
     }
 
+    /// **Send the selection only after the next frame is on screen** — the window stops drawing
+    /// from the moment the other session is attached until it is ready, holding the last picture;
+    /// the frame drawn first is the one without what the choice just closed (the palette).
+    /// [`frame_presented`](Self::frame_presented) lets it go.
+    ///
+    /// A frame that never comes (the GPU refused one) holds it no longer than a request may take.
+    pub(crate) fn hold_selection_for_a_frame(&mut self) {
+        self.hold_selection = self.pending_selection.is_some().then(|| {
+            Instant::now()
+                + std::time::Duration::from_millis(self.connection.request_timeout_ms.get())
+        });
+    }
+
+    /// A frame reached the screen: a held selection may go.
+    pub(crate) fn frame_presented(&mut self) {
+        if self.hold_selection.take().is_some() {
+            self.wake.wake();
+        }
+    }
+
     pub(crate) fn detach_session(&mut self) -> io::Result<()> {
         if self.failed {
             return Err(io::Error::new(

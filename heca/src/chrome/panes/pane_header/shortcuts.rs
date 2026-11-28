@@ -18,7 +18,10 @@ use super::*;
 /// (a keycap draws a Nerd Font `⇧`, a tooltip has to write `Shift`).
 #[derive(Clone, Default, PartialEq)]
 pub(crate) struct ActionShortcuts {
-    by_action: std::collections::HashMap<String, Vec<String>>,
+    /// Keyed by the action **and the arguments the key calls it with**: `command_palette` alone is
+    /// `prefix+p`; `command_palette` with `mode = "session"` is `prefix+#`. A surface asks for the
+    /// action as it calls it, so a row never wears a key that does something else.
+    by_action: std::collections::HashMap<(String, crate::keymap::BindingArgs), Vec<String>>,
     /// The same bindings kept **per layer** — `(layer label, action) → keys`.
     ///
     /// [`by_action`](Self#structfield.by_action) flattens every layer together, which is right for
@@ -49,9 +52,23 @@ impl ActionShortcuts {
         index: &crate::keymap::BindingIndex,
         style: crate::shortcut::KeyStyle,
     ) -> Self {
-        let by_action = index
-            .iter()
-            .filter_map(|(action, bound)| {
+        let mut grouped: std::collections::HashMap<
+            (String, crate::keymap::BindingArgs),
+            Vec<&crate::keymap::BoundKey>,
+        > = std::collections::HashMap::new();
+        for (action, bound) in index {
+            for b in bound {
+                grouped
+                    .entry((action.clone(), b.args.clone()))
+                    .or_default()
+                    .push(b);
+            }
+        }
+        let by_action = grouped
+            .into_iter()
+            .filter_map(|(action, mut bound)| {
+                // The keys pressed straight away first; a key inside a mode after them.
+                bound.sort_by_key(|b| b.after.is_some());
                 // **One entry per distinct key.** A config can bind the same physical key twice
                 // under two spellings — the shipped default did: `cursor_up = "k,Up,ArrowUp"`, and
                 // `Up` and `ArrowUp` both parse to `GridKey::ArrowUp` — and the index keeps both,
@@ -65,13 +82,13 @@ impl ActionShortcuts {
                     // maps `up` and `arrowup` (and `enter`/`return`) to a single glyph — so two
                     // spellings of one key collapse in every display style, while two genuinely
                     // different keys stay two.
-                    let caps = crate::shortcut::chord_caps(&b.key);
+                    let caps = crate::shortcut::chord_caps(&b.sequence());
                     if !seen.contains(&caps) {
                         seen.push(caps);
-                        keys.push(b.key.clone());
+                        keys.push(b.sequence());
                     }
                 }
-                (!keys.is_empty()).then(|| (action.clone(), keys))
+                (!keys.is_empty()).then_some((action, keys))
             })
             .collect();
         // The same index again, kept by the layer each binding was written in, so a surface can ask
@@ -121,17 +138,31 @@ impl ActionShortcuts {
         self.by_layer.get(&(label, id)).map_or(&[], Vec::as_slice)
     }
 
-    /// Every binding of `action_name` as its **raw config key**, in the index's order — empty when
-    /// unbound. What a surface drawing keycaps reads, through
-    /// [`chord_caps`](crate::shortcut::chord_caps).
+    /// Every binding of `action_name` called **with no arguments**, as its **raw config key**, in
+    /// the index's order — empty when unbound. What a surface drawing keycaps reads, through
+    /// [`chord_caps`](crate::shortcut::chord_caps). A key that calls the action with arguments is
+    /// another action as far as the user is concerned — ask for it with
+    /// [`chords_with`](Self::chords_with).
     pub(crate) fn chords(&self, action_name: &str) -> &[String] {
-        self.by_action.get(action_name).map_or(&[], Vec::as_slice)
+        self.chords_with(action_name, &crate::keymap::BindingArgs::new())
     }
 
-    /// The display shortcut for `action_name` as **one line** (several joined with ` / `), or `None`
-    /// when unbound — what a tooltip, which has a single line, shows.
+    /// Every binding of `action_name` called with exactly `args` — `command_palette` with
+    /// `mode = "session"` is `prefix+#`. Empty when no key calls it that way.
+    pub(crate) fn chords_with(
+        &self,
+        action_name: &str,
+        args: &crate::keymap::BindingArgs,
+    ) -> &[String] {
+        self.by_action
+            .get(&(action_name.to_string(), args.clone()))
+            .map_or(&[], Vec::as_slice)
+    }
+
+    /// The display shortcut for `action_name` (called with no arguments) as **one line** (several
+    /// joined with ` / `), or `None` when unbound — what a tooltip, which has a single line, shows.
     pub(crate) fn get(&self, action_name: &str) -> Option<String> {
-        let keys = self.by_action.get(action_name)?;
+        let keys = self.chords(action_name);
         let line = keys
             .iter()
             .map(|k| crate::shortcut::format_shortcut_styled(k, self.style))

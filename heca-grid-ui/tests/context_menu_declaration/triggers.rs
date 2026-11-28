@@ -154,3 +154,46 @@ fn a_hint_is_declared_on_the_wrapper_and_the_framework_finds_and_runs_it() {
     // A path into a tree that no longer has that widget is not an error.
     assert!(!heca_grid_ui::hint::fire_hint(&mut root, &[99]));
 }
+
+/// **The keyboard acts on the item the focused widget names** — `aria-activedescendant`. A search
+/// field keeps the focus while the arrows move a selection through the list beside it; the
+/// keyboard's menu action opens the *selected row's* menu, not the field's (it has none) and not
+/// whatever is behind the field.
+#[test]
+fn the_keyboard_trigger_opens_the_menu_of_the_item_the_focused_widget_names() {
+    use heca_grid_ui::reactive::{SignalGet as _, SignalUpdate as _, signal};
+    let opened = recording_sink();
+    let selected = signal(Some(1usize));
+    let row = |name: &str| {
+        Row::new()
+            .width(Length::Px(100.0))
+            .height(Length::Px(20.0))
+            .child(Label::new(name))
+            .context_menu(menu_named(name))
+    };
+    let (first, second) = (row("First"), row("Second"));
+    // A row is named by its own identity — no key.
+    let ids = [first.base().focus_id(), second.base().focus_id()];
+    let mut root = Flex::column()
+        .context_menu(menu_named("Behind"))
+        .child(
+            Input::new()
+                .width(Length::Px(100.0))
+                .active_descendant(move || selected.get_untracked().map(|i| ids[i])),
+        )
+        .child(first)
+        .child(second);
+    LayoutEngine::new().compute(&mut root, Size::new(200.0, 100.0));
+    root.base().children[0].base().focus(false);
+
+    assert!(heca_grid_ui::open_for_keyboard(&root, None));
+    assert_eq!(labels(&opened), vec!["Second"], "the selected row's menu");
+
+    selected.set(Some(0));
+    assert!(heca_grid_ui::open_for_keyboard(&root, None));
+    assert_eq!(
+        labels(&opened),
+        vec!["Second", "First"],
+        "it follows the selection"
+    );
+}

@@ -86,6 +86,11 @@ impl CommandPalette {
     pub fn placeholder(self, text: impl Into<String>) -> Self {
         self.prop("placeholder", text.into())
     }
+    /// The tooltip of a row's ⋯ button when it opens the row's menu — mirrors grid-ui
+    /// `CommandPalette::menu_tip`. Default: "Open context menu".
+    pub fn menu_tip(self, text: impl Into<String>) -> Self {
+        self.prop("menu_tip", text.into())
+    }
     pub fn panel_size(self, size: ViewSize) -> Self {
         self.prop("panel_size", size)
     }

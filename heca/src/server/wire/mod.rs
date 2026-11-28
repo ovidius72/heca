@@ -179,6 +179,16 @@ pub(crate) enum ServerMsg {
     SessionDetached {
         id: heca_core::layout::SessionId,
     },
+    /// This window's session was terminated or deleted and the server is moving the window to the
+    /// most recent session still running; the [`Attached`](Self::Attached) for it follows. Sent
+    /// instead of `SessionTerminated` / `SessionDeleted`, so the window says where it went rather
+    /// than asking what to do.
+    SessionLeft {
+        /// The session that went.
+        name: String,
+        /// Deleted rather than terminated.
+        deleted: bool,
+    },
     /// Something changed in the shared content; the client reacts to it for itself.
     Changed(Change),
     /// The server refused an action, and why.

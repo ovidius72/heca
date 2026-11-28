@@ -19,7 +19,7 @@ fn identity(client: &impl ClientLink) -> (u64, u64, SessionId) {
 }
 
 #[test]
-fn ordinals_start_at_one_allow_gaps_and_survive_restart_and_repeated_attach() {
+fn ordinals_take_the_lowest_free_number_and_survive_restart_and_repeated_attach() {
     let mut server = ServerLoop::new(
         ServerState::for_tests(Default::default()),
         Session::new(SessionId(1), Default::default()),
@@ -39,7 +39,7 @@ fn ordinals_start_at_one_allow_gaps_and_survive_restart_and_repeated_attach() {
     third.send(ClientMsg::Attach).unwrap();
     server.pump(Instant::now());
     let c = identity(&third);
-    assert_eq!(c.1, 3);
+    assert_eq!(c.1, 1, "the number the first window left free");
     while second.poll().unwrap().is_some() {}
     second.send(ClientMsg::Attach).unwrap();
     server.pump(Instant::now());

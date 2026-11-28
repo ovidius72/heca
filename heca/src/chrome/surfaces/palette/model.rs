@@ -46,6 +46,19 @@ pub(crate) struct PaletteEntry {
     /// aimed at the placement that owns it, focus first. `None` for a row that only shows
     /// something (a notification with nothing left to act on): choosing it just closes the palette.
     pub(crate) intent: Option<InteractionIntent>,
+    /// **What else can be done with this row** — a session's Rename, Terminate, Delete. Shown as
+    /// the row's ⋯, its right-click menu and its keyboard menu (`prefix+>`); each runs through the
+    /// one dispatch door, so it is judged and confirmed as the same action from a key or RPC is.
+    pub(crate) actions: Vec<RowAction>,
+}
+
+/// One of a row's own actions: what its menu entry reads, and what choosing it dispatches.
+#[derive(Debug, Clone)]
+pub(crate) struct RowAction {
+    pub(crate) label: String,
+    pub(crate) intent: InteractionIntent,
+    /// Drawn as a destructive entry — deleting something.
+    pub(crate) danger: bool,
 }
 
 /// The command palette that is up right now: which layer it is, and its live query and open state.

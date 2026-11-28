@@ -2,7 +2,7 @@ use super::{NotificationAction, NotificationDraft};
 
 /// The callback [`Notification::send`] posts a draft through, once the host installs it via
 /// [`install_notification_sink`].
-type NotificationSink = Box<dyn Fn(NotificationDraft)>;
+pub(crate) type NotificationSink = std::rc::Rc<dyn Fn(NotificationDraft)>;
 
 std::thread_local! {
     /// Host-installed hook `Notification::send` posts a draft through — the notification
@@ -18,7 +18,16 @@ std::thread_local! {
 
 /// Install the callback [`Notification::send`] posts a draft through. Call once, at startup.
 pub fn install_notification_sink(f: impl Fn(NotificationDraft) + 'static) {
-    NOTIFICATION_SINK.with(|c| *c.borrow_mut() = Some(Box::new(f)));
+    NOTIFICATION_SINK.with(|c| *c.borrow_mut() = Some(std::rc::Rc::new(f)));
+}
+
+/// The sink installed now, and putting one back — kept per window by the host, so a notification a
+/// window raises is raised in that window's session.
+pub(crate) fn notification_sink() -> Option<NotificationSink> {
+    NOTIFICATION_SINK.with(|c| c.borrow().clone())
+}
+pub(crate) fn set_notification_sink(sink: Option<NotificationSink>) {
+    NOTIFICATION_SINK.with(|c| *c.borrow_mut() = sink);
 }
 
 /// Bind native notifications raised during one server request to that request's session.
@@ -33,11 +42,8 @@ pub(crate) fn collect_during<T>(work: impl FnOnce() -> T) -> (T, Vec<Notificatio
     }
     let drafts = Rc::new(RefCell::new(Vec::new()));
     let pending = drafts.clone();
-    let previous = NOTIFICATION_SINK.with(|c| {
-        c.replace(Some(Box::new(move |draft| {
-            pending.borrow_mut().push(draft)
-        })))
-    });
+    let previous = NOTIFICATION_SINK
+        .with(|c| c.replace(Some(Rc::new(move |draft| pending.borrow_mut().push(draft)))));
     let restore = Restore(previous);
     let result = work();
     drop(restore);

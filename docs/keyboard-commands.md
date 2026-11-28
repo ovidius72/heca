@@ -347,8 +347,14 @@ configurable under `[appearance.terminal] show_scrollbar`):
 | Pane palette | `o` | The command palette on the panes list |
 | Workspace palette | `Ctrl+O` | The command palette on the workspaces list |
 | Session palette | `#` | The command palette on the sessions list |
+| New window | `Ctrl+w` | Another window on the same server, on this window's session, with its own view |
+| Close window | `Cmd+W` (no prefix) | Close this window only; its session keeps running. `Cmd+Q` quits heca |
+| Sessions | `Ctrl+s` then `n` / `r` / `d` / `t` / `x` / `l` / `w` / `c` / `Shift+k` / `Tab` | New, rename, detach, terminate, delete, list, new window, reconnect, stop the server, back to the last session |
+| Sidebar folds | `Shift+z` then `c` / `o` / `Shift+c` / `Shift+o` | Close / open this column, close / open this workspace |
+| Names | `Shift+u` then `p` / `w` | Give the pane / the workspace back its program's name |
+| Install the `heca` command | `Shift+a` then `i` | Put `heca` on the command line |
 | Pane map (exposé) | `Tab` | Toggle the exposé layer |
-| Context menu | `>` | Open the context menu of whatever the keyboard is on (also `Shift+F10` and the `ContextMenu` key, without the prefix) |
+| Context menu | `>` | Open the context menu of whatever the keyboard is on — with the palette open, its selected row's |
 | Scroll view left / right | `Shift+Left` / `Shift+Right` | Pan the horizontal view to reach off-screen columns |
 
 ### Selection, clipboard and notifications
@@ -356,7 +362,7 @@ configurable under `[appearance.terminal] show_scrollbar`):
 | Command | Default Binding | Description |
 | --------- | ---------------- | ------------- |
 | Selection mode | `s` | Enter selection mode |
-| Clear selection | `Shift+S` | Clear the selection and leave selection mode |
+| Clear selection | `Shift+Q` | Clear the selection and leave selection mode |
 | Copy selection | `y` | Copy the selection to the clipboard |
 | Paste | `Shift+P` | Paste the clipboard (also `Super+v` and `Ctrl+Shift+v`, without the prefix) |
 | Pick a notification | `n` | Letters over the visible toast actions and their close buttons |

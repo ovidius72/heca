@@ -217,5 +217,6 @@ impl Frame {
         state.compositor.blit(&self.view, &mut self.encoder);
         state.queue.submit(std::iter::once(self.encoder.finish()));
         state.queue.present(self.surface_texture);
+        state.client.frame_presented();
     }
 }

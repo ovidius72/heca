@@ -46,6 +46,7 @@ named_set! {
         List => "list",
         Sidebar => "sidebar",
         DotsThreeVertical => "dots_three_vertical",
+        DotsThree => "dots_three",
         ArrowRight => "arrow_right",
         ArrowLineLeft => "arrow_line_left",
         ArrowLineRight => "arrow_line_right",
