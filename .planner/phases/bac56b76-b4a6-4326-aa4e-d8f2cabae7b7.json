@@ -32,7 +32,8 @@
     "ddf9956a-3b8c-45fb-8494-d8fbc1861ac0",
     "db2dfced-a0dd-4a83-8dc0-4c6bc35f11c2",
     "3f13b3ed-604d-444a-906e-2df3f42fee7a",
-    "143d3ef3-7818-4af4-a361-113c5baa6ed4"
+    "143d3ef3-7818-4af4-a361-113c5baa6ed4",
+    "68438ac7-a7e8-4e3a-9345-38a0853b6713"
   ],
   "tasks": [
     {
@@ -442,7 +443,7 @@
       "status": "planned",
       "description": "THE SYNTAX: never a number in the code. Found on main 2026-11-24:\n- Glow `radius:` / `intensity:` literals in heca-grid-ui/src/widgets: row.rs (4), gauge.rs (2), dock_frame.rs (2), spinner.rs (2), context_menu/presenter.rs (2), scroll_bar.rs, scroll_region/component.rs, key_hint/keycap.rs (1 each). Other widgets (button, badge_button, toggle, checkbox, badge, tabs) have glow numbers in other forms — sweep them too.\n- Constants: `BAR_W` alert.rs:16, marker_group.rs:37 (+ `BAR_W_HOVER` :39), row.rs:35; `CHECK_SIZE` row.rs:39; `RAIL_ICON_SIZE` dock_frame.rs:64.\n- `Icon::size(px: f32)` heca-grid-ui/src/widgets/icon.rs:400 — a size in pixels as API.\n\nFix: glow strengths and bar widths come from the theme (one token per meaning, shared by every widget that means it); icon size is said relative to the text (em / a theme step), so `Icon::size` takes that, not pixels. The look must stay identical (cleanup never changes the look): the tokens' defaults are today's numbers.\n\nCheck: tests; Antonio eye check that nothing moved or changed glow.",
       "descriptionUpdatedAt": "2026-11-24T09:49:03.402Z",
-      "notes": "",
+      "notes": "Checked on main 2026-11-25: still open — 14 glow radius/intensity literals in heca-grid-ui/src/widgets; BAR_W in alert.rs:16, marker_group.rs:37 (+BAR_W_HOVER :39), row.rs:37; CHECK_SIZE in row.rs:49 AND a second copy in item.rs:54 (not in the description); RAIL_ICON_SIZE dock_frame.rs:66; Icon::size(px) icon.rs:405.\nFound 2026-11-28 (T593): the command palette's list outline is `.border_width(1.0)` (heca-grid-ui/src/widgets/command_palette/view.rs) and `Row::border_width` / `List::border_width` take only an f32 — they need a theme form (the theme already has `border_width`, named) so the palette reads it instead of a literal.",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
@@ -485,7 +486,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-11-24T09:49:03.283Z",
-      "updatedAt": "2026-11-24T09:49:03.283Z",
+      "updatedAt": "2026-11-27T23:08:00.691Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -775,10 +776,126 @@
       "updatedAt": "2026-11-25T00:35:47.598Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "68438ac7-a7e8-4e3a-9345-38a0853b6713",
+      "phaseId": "bac56b76-b4a6-4326-aa4e-d8f2cabae7b7",
+      "number": 593,
+      "shortId": "BHFNR",
+      "priority": 10,
+      "shortName": "sessions-from-the-window-row-a",
+      "title": "Sessions and windows: row actions in the session list, a closed session moves the window on, every key shown on its row, more windows in one process",
+      "status": "done",
+      "description": "Problems Antonio found using the installed app (2026-11-27), checked in the code:\n\n1. **No way to act on a session from the session list.** `prefix+#` opens the palette's session list (heca/src/chrome/surfaces/palette/sessions.rs:7 `entries`): a row only switches (`SwitchSession`). Terminate / restart / delete / rename exist as catalog actions reachable from keys, RPC and plugins (`terminate_session`, `restart_session`, `delete_session`, `rename_session_to`, `switch_session`, `create_session`, `detach_session`, `list_sessions` — heca/src/input/build/session.rs; docs/sessions.md), but nothing on the row.\n   **Fix (library first):** a palette row declares its actions — the same declaration a sidebar row uses for its context menu (heca-grid-ui context_menu declaration, `Menu` on any widget). Each action is a registered action with its argument (`delete_session { session: <name> }`), so it goes through the one dispatch door: same policy, same confirmation (actions/confirm.rs), same as RPC/plugin. On the selected/hovered row an icon (⋯) appears at the far right after the keycaps — its own theme colour (not the keycap's), left padding from the theme, tooltip \"Open context menu\". Click on the icon, right click on the row, or `prefix+>` open the menu. A row with exactly one action runs it from the icon directly (tooltip names it) — no menu for a single choice. Works for every palette list (panes, workspaces, notifications) and for plugin rows the same way. The current session is NOT excluded.\n\n2. **Closing the window's session leaves the window on a dead session** behind a blocking dialog (handlers/sessions.rs:174 `session_choice_spec`: Restart / select / new / Exit).\n   **3. Plain `heca` reattaches to the last session even when it was terminated** (server/run/mod.rs:625 `index_for(self.last_session)`; only delete drops it from `recent_sessions`, server/run/sessions.rs:95).\n   **Fix, one rule in one place on the server:** \"the session a window goes to\" = the most recent session still running. Terminate/delete of the window's session moves the window there with a toast (\"Session X terminated\"); plain attach skips terminated sessions. The blocking dialog stays only when no running session is left.\n\n4. **A key bound to an action with arguments never shows on its row.** The binding index is keyed by the action NAME only (keymap.rs:192 `index_binding`, read by ActionShortcuts::chords/get in chrome/panes/pane_header/shortcuts.rs:127-141), so `prefix+o` / `prefix+Ctrl+o` / `prefix+#` (all `command_palette` with a `mode`) land on the \"Command Palette\" row and nowhere else.\n   **Fix at the root:** the index records the action WITH its arguments (ActionRef already carries them — app/registry/binding.rs:46); a row asks for its own action + args. Plain-name lookup keeps working for argument-less actions. Applies to plugin and widget-layer bindings too (registry/widgets.rs:104, registry/surfaces/mod.rs:49).\n   Plus: one action for the session list — `list_sessions` already opens `command_palette{mode=session}` in a window (client/mod.rs:486); bind `prefix+#` to `list_sessions` so the \"Sessions\" row shows it.\n\n5. **Shift+F10 and the Menu key are global** (keybindings.default.toml:309-315): heca swallows them even when a terminal has focus, so the program inside never gets them. Remove both; `prefix+>` stays the context-menu key. Update docs/keyboard-commands.md:351, docs/widgets.md:7867 and the comments naming Shift+F10 (heca-grid-ui menu.rs, builders/menu.rs, event/kinds.rs, event/mod.rs, widgets/context_menu/mod.rs, heca handlers/system.rs:39).\n\nCheck: tests (sabotaged); RPC `heca rpc delete_session` etc. unchanged; Antonio eye check: prefix+# → ⋯ on a row → delete/terminate (current included) → window moves on; restart heca → no Restart dialog for a closed session; keys shown on \"Sessions\" and per-mode rows; Shift+F10 reaches a terminal program.\n\n---\n**Completion summary:**\nShipped in PR #373 (branch feat/t593-sessions-windows, commits bc09daf9 + ef128d7c). CI green on ubuntu, macos, windows on ef128d7c; 3571 local tests pass; clippy -D warnings clean on macOS and Windows; rustdoc links clean; Antonio's eye check on a separate test server (HECA_DATA_DIR=~/heca-test-593).\n\nWhat changed:\n- Session list rows: List::item_menu (the row declares its menu), List::selected_item + FocusExt::active_descendant (by widget identity, no key), Command::context_menu, outlined ⋯ Button on the selected row (selection follows the pointer); a one-entry menu runs from the button; rename_session takes a session; last_session (prefix+Ctrl+s Tab).\n- Server: one rule \"most recent running session\" for a window whose session is terminated/deleted (SessionLeft + bottom-bar note) and for plain attach (new session when nothing runs); lowest free window number; title {session} following renames; switch waits for a clean frame (cut_exits + hold_selection_for_a_frame).\n- Windows: several windows in one process (prefix+Ctrl+w), WindowContext per window, LoopEvent/WindowProxy; close_window (Super+w); Windows OS refuses (no shared server).\n- Keys: binding index keyed by action + arguments; key sequences after the prefix (space = then, neovim-style wait on prefix_timeout_ms), BoundKey builder, mode keys shown after their trigger; every no-arg action has a default key (sessions prefix+Ctrl+s …, folds prefix+Shift+z …, names prefix+Shift+u …, prefix+Shift+a i, clear_selection prefix+Shift+q); global Shift+F10/Menu key removed; dead hardcoded chord mode removed; one binding per line in the palette.\n- Docs: keybindings (how a key is written, sequences), sessions (every action + args), keyboard commands, widgets, AGENTS.md key rule.\n\nRemaining / not verified: wrong-pane-gets-keys report not reproduced; agent status icons to re-check after the work server restarts on the new build; idle CPU to measure; palette list `.border_width(1.0)` literal recorded on T584. Merge of #373 is Antonio's; release 0.1.0-5 after merge.",
+      "descriptionUpdatedAt": "2026-11-27T23:14:09.421Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "56915ba8-084c-4a4e-b061-0db83d9b3844",
+          "date": "2026-11-27T14:41:18.612Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "68438ac7-a7e8-4e3a-9345-38a0853b6713-check-002-in-progress-done",
+          "date": "2026-11-27T23:14:09.420Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped in PR #373 (branch feat/t593-sessions-windows, commits bc09daf9 + ef128d7c). CI green on ubuntu, macos, windows on ef128d7c; 3571 local tests pass; clippy -D warnings clean on macOS and Windows; rustdoc links clean; Antonio's eye check on a separate test server (HECA_DATA_DIR=~/heca-test-593).\n\nWhat changed:\n- Session list rows: List::item_menu (the row declares its menu), List::selected_item + FocusExt::active_descendant (by widget identity, no key), Command::context_menu, outlined ⋯ Button on the selected row (selection follows the pointer); a one-entry menu runs from the button; rename_session takes a session; last_session (prefix+Ctrl+s Tab).\n- Server: one rule \"most recent running session\" for a window whose session is terminated/deleted (SessionLeft + bottom-bar note) and for plain attach (new session when nothing runs); lowest free window number; title {session} following renames; switch waits for a clean frame (cut_exits + hold_selection_for_a_frame).\n- Windows: several windows in one process (prefix+Ctrl+w), WindowContext per window, LoopEvent/WindowProxy; close_window (Super+w); Windows OS refuses (no shared server).\n- Keys: binding index keyed by action + arguments; key sequences after the prefix (space = then, neovim-style wait on prefix_timeout_ms), BoundKey builder, mode keys shown after their trigger; every no-arg action has a default key (sessions prefix+Ctrl+s …, folds prefix+Shift+z …, names prefix+Shift+u …, prefix+Shift+a i, clear_selection prefix+Shift+q); global Shift+F10/Menu key removed; dead hardcoded chord mode removed; one binding per line in the palette.\n- Docs: keybindings (how a key is written, sequences), sessions (every action + args), keyboard commands, widgets, AGENTS.md key rule.\n\nRemaining / not verified: wrong-pane-gets-keys report not reproduced; agent status icons to re-check after the work server restarts on the new build; idle CPU to measure; palette list `.border_width(1.0)` literal recorded on T584. Merge of #373 is Antonio's; release 0.1.0-5 after merge."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "68438ac7-a7e8-4e3a-9345-38a0853b6713-check-001-binding-index-keyed-by-action-arguments-rows-look-up-their-own-action-args-prefix-bound-to-list-sessions",
+          "number": 1,
+          "title": "Binding index keyed by action + arguments; rows look up their own action + args; prefix+# bound to list_sessions",
+          "checked": true
+        },
+        {
+          "id": "68438ac7-a7e8-4e3a-9345-38a0853b6713-check-002-palette-rows-declare-actions-same-declaration-as-a-row-s-context-menu-icon-on-the-selected-hovered-row-own-theme-colour-theme-padding-tooltip-one-action-runs-directly",
+          "number": 2,
+          "title": "Palette rows declare actions (same declaration as a row's context menu); ⋯ icon on the selected/hovered row (own theme colour, theme padding, tooltip); one action → runs directly",
+          "checked": true
+        },
+        {
+          "id": "68438ac7-a7e8-4e3a-9345-38a0853b6713-check-003-session-list-rows-switch-rename-terminate-restart-delete-current-session-included",
+          "number": 3,
+          "title": "Session list rows: switch, rename, terminate/restart, delete — current session included",
+          "checked": true
+        },
+        {
+          "id": "68438ac7-a7e8-4e3a-9345-38a0853b6713-check-004-server-rule-a-window-whose-session-is-terminated-deleted-moves-to-the-most-recent-running-session-toast-plain-attach-skips-terminated-dialog-only-when-none-left",
+          "number": 4,
+          "title": "Server rule: a window whose session is terminated/deleted moves to the most recent running session (toast); plain attach skips terminated; dialog only when none left",
+          "checked": true
+        },
+        {
+          "id": "68438ac7-a7e8-4e3a-9345-38a0853b6713-check-005-remove-global-shift-f10-and-menu-key-docs-and-comments-updated",
+          "number": 5,
+          "title": "Remove global Shift+F10 and Menu key; docs and comments updated",
+          "checked": true
+        },
+        {
+          "id": "68438ac7-a7e8-4e3a-9345-38a0853b6713-check-006-tests-sabotaged-docs-widgets-md-docs-sessions-md-clippy-macos-windows-ci",
+          "number": 6,
+          "title": "Tests (sabotaged), docs/widgets.md + docs/sessions.md, clippy macOS + Windows, CI",
+          "checked": true
+        },
+        {
+          "id": "68438ac7-a7e8-4e3a-9345-38a0853b6713-check-007-antonio-eye-check",
+          "number": 7,
+          "title": "Antonio eye check",
+          "checked": true
+        },
+        {
+          "id": "68438ac7-a7e8-4e3a-9345-38a0853b6713-check-008-prefix-with-the-palette-open-opens-the-menu-of-the-palette-s-cursor-row-never-the-pane-under-it-today-handlers-system-rs-32-finds-no-declared-menu-on-the-palette-and-falls-back-to-the-active-pane",
+          "number": 8,
+          "title": "prefix+> with the palette open opens the menu of the palette's cursor row, never the pane under it (today: handlers/system.rs:32 finds no declared menu on the palette and falls back to the active pane)",
+          "checked": true
+        },
+        {
+          "id": "68438ac7-a7e8-4e3a-9345-38a0853b6713-check-009-session-actions-documented-docs-sessions-md-gets-a-table-of-every-session-action-with-its-arguments-reconnect-session-is-missing-today-descriptions-in-actions-builtins-session-rs-match-the-new-behaviour-delete-session-terminate-session-move-the-window-on",
+          "number": 9,
+          "title": "Session actions documented: docs/sessions.md gets a table of every session action with its arguments (reconnect_session is missing today); descriptions in actions/builtins/session.rs match the new behaviour (delete_session/terminate_session move the window on)",
+          "checked": true
+        },
+        {
+          "id": "68438ac7-a7e8-4e3a-9345-38a0853b6713-check-010-more-windows-in-one-heca-process-prefix-ctrl-w-new-window-opens-another-window-on-the-same-server-each-its-own-client-with-its-own-view-per-window-state-split-from-the-app-lib-rs-state-map-by-windowid-appevent-carries-the-window-the-five-sinks-installed-at-startup-and-heca-grid-ui-thread-locals-made-per-window-closing-one-window-closes-only-it-one-dock-icon-on-macos",
+          "number": 10,
+          "title": "More windows in one heca process: prefix+Ctrl+w (new_window) opens another window on the same server, each its own client with its own view; per-window state split from the app (lib.rs state map by WindowId, AppEvent carries the window, the five sinks installed at startup and heca-grid-ui thread-locals made per window); closing one window closes only it; one Dock icon on macOS",
+          "checked": true
+        },
+        {
+          "id": "68438ac7-a7e8-4e3a-9345-38a0853b6713-check-011-key-sequences-after-the-prefix-prefix-shift-s-r-a-space-then-neovim-style-wait-on-prefix-timeout-ms-every-no-argument-action-ships-with-a-key-sessions-prefix-shift-s-folds-prefix-shift-z-names-prefix-shift-u-install-prefix-shift-a-i-clear-selection-prefix-shift-q-palette-show-keys-show-mode-keys-after-their-trigger-dead-hardcoded-chord-mode-removed-docs-how-a-key-is-written-agents-md-rule",
+          "number": 11,
+          "title": "Key sequences after the prefix (\"prefix+Shift+s r\", a space = then), neovim-style wait on prefix_timeout_ms; every no-argument action ships with a key (sessions prefix+Shift+s …, folds prefix+Shift+z …, names prefix+Shift+u …, install prefix+Shift+a i; clear_selection → prefix+Shift+q); palette/--show-keys show mode keys after their trigger; dead hardcoded chord mode removed; docs (How a key is written) + AGENTS.md rule",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-11-27T14:41:18.612Z",
+      "completedAt": "2026-11-27T23:14:09.420Z",
+      "createdAt": "2026-11-27T13:49:47.530Z",
+      "updatedAt": "2026-11-27T23:14:09.420Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
+          "createdAt": "2026-11-27T14:41:17.292Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-24T09:48:30.358Z",
-  "updatedAt": "2026-11-25T19:32:51.902Z",
+  "updatedAt": "2026-11-27T23:14:09.420Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -797,7 +914,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:e1c0e9d9-b912-421c-920d-8304ae45806d",
-      "createdAt": "2026-11-24T20:02:59.437Z"
+      "createdAt": "2026-11-27T14:41:17.292Z"
     }
   ]
 }
